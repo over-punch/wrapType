@@ -24,7 +24,7 @@ export default function Home() {
 				<div className="flex items-center gap-4">
 					<CopyInstall />
 					<a
-						href="https://github.com/Liiift-Studio/WrapType"
+						href="https://github.com/Liiift-Studio/wrapType"
 						target="_blank"
 						rel="noopener noreferrer"
 						aria-label="GitHub repository (opens in new tab)"
