@@ -101,7 +101,7 @@
 	"homepage": "https://wraptype.com",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Liiift-Studio/wrapType.git"
+		"url": "git+https://github.com/Liiift-Studio/wrapType.git"
 	},
 	"bugs": {
 		"url": "https://github.com/Liiift-Studio/wrapType/issues"
