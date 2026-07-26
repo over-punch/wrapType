@@ -240,7 +240,7 @@ loader.load('/model.glb', (gltf) => {
 									<th className="pb-2 font-normal">Description</th>
 								</tr>
 							</thead>
-							<tbody className="text-muted zebra-bleed">
+							<tbody className="text-muted zebra">
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">text</td><td className="py-2 pr-6">—</td><td className="py-2">The string to distribute across the surface. Repeats to fill.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">shape</td><td className="py-2 pr-6">&apos;sphere&apos;</td><td className="py-2"><code className="font-mono">&apos;sphere&apos;</code> · <code className="font-mono">&apos;cylinder&apos;</code> · <code className="font-mono">&apos;torus&apos;</code> · <code className="font-mono">&apos;plane&apos;</code> · <code className="font-mono">&apos;stool&apos;</code> · <code className="font-mono">&apos;flag&apos;</code></td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">mode</td><td className="py-2 pr-6">&apos;surface&apos;</td><td className="py-2"><code className="font-mono">&apos;surface&apos;</code> — characters sit on the geometry · <code className="font-mono">&apos;silhouette&apos;</code> — characters follow the outline contour</td></tr>
