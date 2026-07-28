@@ -1,42 +1,23 @@
 // wrapType landing page — hero, live demo, how it works, usage, API
 import Demo from "@/components/Demo"
-import CopyInstall from "@/components/CopyInstall"
+import Hero from "@/components/Hero"
 import CodeBlock from "@/components/CodeBlock"
 import { version } from "../../../package.json"
 import { version as siteVersion } from "../../package.json"
 import SiteFooter from "../components/SiteFooter"
-import { MagnetChar } from "@liiift-studio/magnettype"
 
 export default function Home() {
 	return (
 		<main className="flex flex-col items-center px-6 py-20 gap-24">
 
 			{/* Hero */}
-			<section className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-6">
-				<div className="flex flex-col gap-2">
-					<p className="text-xs uppercase tracking-[0.18em] font-medium text-muted">text-on-mesh warping</p>
-					<h1 className="text-4xl lg:text-8xl xl:text-9xl" style={{ fontFamily: "var(--font-merriweather), serif", fontVariationSettings: '"wght" 300, "opsz" 144', lineHeight: "1.05em" }}>
-						<MagnetChar as="span" minWeight={300} maxWeight={800} spreadRadius={220} fixedAxes={{ opsz: 144 }}>Text on a surface,</MagnetChar><br />
-						<MagnetChar as="span" minWeight={300} maxWeight={800} spreadRadius={220} fixedAxes={{ opsz: 144 }} style={{ color: "var(--foreground-subtle)", fontStyle: "italic" }}>still real DOM.</MagnetChar>
-					</h1>
-				</div>
-				<div className="flex flex-wrap items-center gap-4">
-					<CopyInstall />
-					<a
-						href="https://github.com/Liiift-Studio/wrapType"
-						target="_blank"
-						rel="noopener noreferrer"
-						aria-label="GitHub repository (opens in new tab)"
-						className="text-sm text-muted hover:text-foreground transition-colors"
-					>
-						GitHub <span aria-hidden="true">↗</span>
-					</a>
-				</div>
-				<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted tracking-wide">
-					<span>TypeScript</span><span>·</span>
-					<span>Three.js CSS3DRenderer</span><span>·</span>
-					<span>React + Vanilla JS</span>
-				</div>
+			<Hero
+				eyebrow="text-on-mesh warping"
+				title={[{ text: "Text on a surface," }, { text: "still real DOM.", italic: true, subtle: true }]}
+				install="@liiift-studio/wraptype"
+				github="https://github.com/Liiift-Studio/wrapType"
+				tech={["TypeScript", "Three.js CSS3DRenderer", "React + Vanilla JS"]}
+			>
 				<p className="text-base leading-relaxed max-w-lg">
 					CSS transforms can fake 3D. wrapType does it properly — distributing
 					real DOM text elements across the surface of a sphere, cylinder, torus,
@@ -44,7 +25,7 @@ export default function Home() {
 					Variable fonts, CSS animations, and every other Liiift tool compose
 					naturally because the characters are actual HTML, not canvas pixels.
 				</p>
-			</section>
+			</Hero>
 
 			{/* Interactive demo */}
 			<section className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-4">
