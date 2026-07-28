@@ -83,13 +83,6 @@ const SIZE_UNITS: SizeUnit[] = ["px", "pt", "em", "rem", "vw", "vh"]
 const MAX_MESH_BYTES = 20 * 1024 * 1024
 
 /** Accepted MIME types for mesh files. */
-const ACCEPTED_MESH_MIME = new Set([
-	"model/gltf-binary",
-	"model/gltf+json",
-	"text/plain",           // common .obj MIME in many browsers
-	"application/octet-stream", // fallback for .glb
-	"",                     // some browsers return empty string for unknown types
-])
 
 /** Convert a value in any supported unit to CSS pixels. Safe to call server-side. */
 function toPx(value: number, unit: SizeUnit): number {
