@@ -1,5 +1,5 @@
 {
-	"name": "@liiift-studio/wraptype",
+	"name": "@overpunch/wraptype",
 	"version": "1.0.9",
 	"description": "Live DOM text wrapping any 3D surface — surface and silhouette modes, orbit camera, built-in shapes plus custom mesh positions",
 	"type": "module",

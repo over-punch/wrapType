@@ -14,7 +14,7 @@ export default function Home() {
 			<Hero
 				eyebrow="text-on-mesh warping"
 				title={[{ text: "Text on a surface," }, { text: "still real DOM.", italic: true, subtle: true }]}
-				install="@liiift-studio/wraptype"
+				install="@overpunch/wraptype"
 				github="https://github.com/Liiift-Studio/wrapType"
 				tech={["TypeScript", "Three.js CSS3DRenderer", "React + Vanilla JS"]}
 			>
@@ -143,7 +143,7 @@ export default function Home() {
 
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">React component</p>
-						<CodeBlock code={`import { WrapTypeScene } from '@liiift-studio/wraptype'
+						<CodeBlock code={`import { WrapTypeScene } from '@overpunch/wraptype'
 
 <WrapTypeScene
   text="Typography is the art and technique of arranging type"
@@ -158,7 +158,7 @@ export default function Home() {
 
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">React hook</p>
-						<CodeBlock code={`import { useWrapType } from '@liiift-studio/wraptype'
+						<CodeBlock code={`import { useWrapType } from '@overpunch/wraptype'
 
 const { ref } = useWrapType({
   text: 'Typography is the art and technique of arranging type',
@@ -171,7 +171,7 @@ const { ref } = useWrapType({
 
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">Vanilla JS</p>
-						<CodeBlock code={`import { getCharPositions, createWrapScene } from '@liiift-studio/wraptype'
+						<CodeBlock code={`import { getCharPositions, createWrapScene } from '@overpunch/wraptype'
 
 const container = document.getElementById('scene')
 const positions = getCharPositions({
@@ -189,7 +189,7 @@ scene.destroy()`} />
 						<p className="text-muted">Custom mesh (Vanilla JS)</p>
 						<CodeBlock code={`import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Mesh } from 'three'
-import { getCharPositionsFromMesh, createWrapScene } from '@liiift-studio/wraptype'
+import { getCharPositionsFromMesh, createWrapScene } from '@overpunch/wraptype'
 
 const loader = new GLTFLoader()
 loader.load('/model.glb', (gltf) => {

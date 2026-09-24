@@ -4,8 +4,8 @@
 // Kept in its own file so it is only bundled when the SDF tab is activated.
 
 import { Canvas } from "@react-three/fiber"
-import { WrapTypeMesh } from "@liiift-studio/wraptype/r3f"
-import type { WrapTypeShape } from "@liiift-studio/wraptype"
+import { WrapTypeMesh } from "@overpunch/wraptype/r3f"
+import type { WrapTypeShape } from "@overpunch/wraptype"
 
 /** Props forwarded from the Demo SDF tab */
 interface SDFCanvasProps {

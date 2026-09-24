@@ -1,6 +1,6 @@
 # wrapType
 
-[![npm](https://img.shields.io/npm/v/%40liiift-studio%2Fwraptype.svg)](https://www.npmjs.com/package/@liiift-studio/wraptype) [![npm downloads](https://img.shields.io/npm/dm/%40liiift-studio%2Fwraptype.svg)](https://www.npmjs.com/package/@liiift-studio/wraptype) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/Liiift-Studio/type-tools)
+[![npm](https://img.shields.io/npm/v/%40liiift-studio%2Fwraptype.svg)](https://www.npmjs.com/package/@overpunch/wraptype) [![npm downloads](https://img.shields.io/npm/dm/%40liiift-studio%2Fwraptype.svg)](https://www.npmjs.com/package/@overpunch/wraptype) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/Liiift-Studio/type-tools)
 
 Real DOM text on any 3D surface — sphere, cylinder, torus, plane, waving flag, stool, or a custom mesh.
 
@@ -15,7 +15,7 @@ wrapType uses Three.js's CSS3DRenderer to distribute HTML text elements across t
 ## Install
 
 ```bash
-npm install @liiift-studio/wraptype three
+npm install @overpunch/wraptype three
 ```
 
 Only **`three`** is required. The remaining peers are **optional** — install the ones you use:
@@ -24,14 +24,14 @@ Only **`three`** is required. The remaining peers are **optional** — install t
 |---|---|
 | `three` (required) | Core geometry + CSS3DRenderer |
 | `react`, `react-dom` | The `WrapTypeScene` component / `useWrapType` hook |
-| `@react-three/fiber`, `troika-three-text` | The GPU/SDF renderer at `@liiift-studio/wraptype/r3f` |
+| `@react-three/fiber`, `troika-three-text` | The GPU/SDF renderer at `@overpunch/wraptype/r3f` |
 
 ```bash
 # React + DOM renderer (most common):
-npm install @liiift-studio/wraptype three react react-dom
+npm install @overpunch/wraptype three react react-dom
 
 # R3F / WebGL renderer:
-npm install @liiift-studio/wraptype three @react-three/fiber troika-three-text
+npm install @overpunch/wraptype three @react-three/fiber troika-three-text
 ```
 
 Vanilla JS users need only `three`.
@@ -43,7 +43,7 @@ Vanilla JS users need only `three`.
 ```tsx
 'use client' // Next.js App Router: WrapTypeScene renders in the browser only.
 
-import { WrapTypeScene } from '@liiift-studio/wraptype'
+import { WrapTypeScene } from '@overpunch/wraptype'
 
 <WrapTypeScene
   text="Typography is the art and technique of arranging type"
@@ -66,7 +66,7 @@ import { WrapTypeScene } from '@liiift-studio/wraptype'
 ### Hook
 
 ```tsx
-import { useWrapType } from '@liiift-studio/wraptype'
+import { useWrapType } from '@overpunch/wraptype'
 
 const { ref } = useWrapType({
   text: 'Typography is the art and technique of arranging type',
@@ -80,7 +80,7 @@ const { ref } = useWrapType({
 ## Vanilla JS
 
 ```ts
-import { getCharPositions, createWrapScene } from '@liiift-studio/wraptype'
+import { getCharPositions, createWrapScene } from '@overpunch/wraptype'
 
 const container = document.getElementById('scene')
 
@@ -105,7 +105,7 @@ scene.rebuild(newPositions)
 
 ## GPU / WebGL renderer (`/r3f`)
 
-The default renderer places real HTML in 3D (CSS3DRenderer). For text that needs to live **inside** a WebGL scene — receiving lights, shaders, and post-processing — import the SDF renderer from the `@liiift-studio/wraptype/r3f` entry point. It uses [`troika-three-text`](https://github.com/protectwise/troika) for GPU-antialiased glyphs curved onto the surface via troika's native `curveRadius`.
+The default renderer places real HTML in 3D (CSS3DRenderer). For text that needs to live **inside** a WebGL scene — receiving lights, shaders, and post-processing — import the SDF renderer from the `@overpunch/wraptype/r3f` entry point. It uses [`troika-three-text`](https://github.com/protectwise/troika) for GPU-antialiased glyphs curved onto the surface via troika's native `curveRadius`.
 
 Requires `@react-three/fiber` and `troika-three-text` as peers.
 
@@ -113,7 +113,7 @@ Requires `@react-three/fiber` and `troika-three-text` as peers.
 
 ```tsx
 import { Canvas } from '@react-three/fiber'
-import { WrapTypeMesh } from '@liiift-studio/wraptype/r3f'
+import { WrapTypeMesh } from '@overpunch/wraptype/r3f'
 
 <Canvas>
   <WrapTypeMesh
@@ -132,7 +132,7 @@ import { WrapTypeMesh } from '@liiift-studio/wraptype/r3f'
 ### Imperative (no React)
 
 ```ts
-import { createSDFText, updateSDFText } from '@liiift-studio/wraptype/r3f'
+import { createSDFText, updateSDFText } from '@overpunch/wraptype/r3f'
 
 const { group, dispose } = createSDFText('cylinder', {
   text: 'Typography on any surface',
@@ -151,8 +151,8 @@ dispose()
 
 | When to use | Renderer | Import |
 |---|---|---|
-| Variable fonts, CSS animation, selectable text, compose with other Liiift tools | **DOM (CSS3DRenderer)** | `@liiift-studio/wraptype` |
-| Text inside a WebGL scene — lighting, shaders, post-processing, large glyph counts | **SDF (WebGL)** | `@liiift-studio/wraptype/r3f` |
+| Variable fonts, CSS animation, selectable text, compose with other Liiift tools | **DOM (CSS3DRenderer)** | `@overpunch/wraptype` |
+| Text inside a WebGL scene — lighting, shaders, post-processing, large glyph counts | **SDF (WebGL)** | `@overpunch/wraptype/r3f` |
 
 ## API
 
@@ -247,7 +247,7 @@ In code, load any Three.js `Mesh` and feed it to `getCharPositionsFromMesh`, the
 ```ts
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Mesh } from 'three'
-import { getCharPositionsFromMesh, createWrapScene } from '@liiift-studio/wraptype'
+import { getCharPositionsFromMesh, createWrapScene } from '@overpunch/wraptype'
 
 new GLTFLoader().load('/model.glb', (gltf) => {
   let mesh = null

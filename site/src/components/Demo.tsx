@@ -3,8 +3,8 @@
 // wrapType demo — DOM (CSS3DRenderer) and SDF (WebGL/troika) renderer tabs
 import { useState, useDeferredValue, useCallback, useRef, Suspense, lazy, Component, useMemo } from "react"
 import type { ReactNode } from "react"
-import { WrapTypeScene, getCharPositionsFromMesh } from "@liiift-studio/wraptype"
-import type { WrapTypeShape, WrapTypeFill, CharPosition } from "@liiift-studio/wraptype"
+import { WrapTypeScene, getCharPositionsFromMesh } from "@overpunch/wraptype"
+import type { WrapTypeShape, WrapTypeFill, CharPosition } from "@overpunch/wraptype"
 import { Mesh, Group } from "three"
 import type { Object3D } from "three"
 
