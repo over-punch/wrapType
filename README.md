@@ -1,13 +1,13 @@
 # wrapType
 
-[![npm](https://img.shields.io/npm/v/%40liiift-studio%2Fwraptype.svg)](https://www.npmjs.com/package/@overpunch/wraptype) [![npm downloads](https://img.shields.io/npm/dm/%40liiift-studio%2Fwraptype.svg)](https://www.npmjs.com/package/@overpunch/wraptype) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/Liiift-Studio/type-tools)
+[![npm](https://img.shields.io/npm/v/%40overpunch%2Fwraptype.svg)](https://www.npmjs.com/package/@overpunch/wraptype) [![npm downloads](https://img.shields.io/npm/dm/%40overpunch%2Fwraptype.svg)](https://www.npmjs.com/package/@overpunch/wraptype) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/over-punch/type-tools)
 
 Real DOM text on any 3D surface — sphere, cylinder, torus, plane, waving flag, stool, or a custom mesh.
 
 wrapType uses Three.js's CSS3DRenderer to distribute HTML text elements across the geometry of a 3D surface. Each character is a real DOM element oriented along the surface normal, which means variable fonts, CSS animations, hover states, and every other Liiift tool compose naturally — no canvas, no textures.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Liiift-Studio/wrapType/main/assets/hero.gif?v=1" alt="The word TYPOGRAPHY rendered as real HTML spans wrapped around a slowly rotating 3D sphere" width="640">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/hero.gif?v=1" alt="The word TYPOGRAPHY rendered as real HTML spans wrapped around a slowly rotating 3D sphere" width="640">
 </p>
 
 > Try it live and drop in your own `.glb` / `.gltf` / `.obj` mesh at **[wraptype.com](https://wraptype.com)**.
@@ -57,8 +57,8 @@ import { WrapTypeScene } from '@overpunch/wraptype'
 ```
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Liiift-Studio/wrapType/main/assets/shape-sphere.png?v=1" alt="The word TYPOGRAPHY wrapped around a sphere in latitude bands" width="380">
-  <img src="https://raw.githubusercontent.com/Liiift-Studio/wrapType/main/assets/shape-cylinder.png?v=1" alt="The word WRAPTYPE arced around the curved side of a cylinder" width="380">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-sphere.png?v=1" alt="The word TYPOGRAPHY wrapped around a sphere in latitude bands" width="380">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-cylinder.png?v=1" alt="The word WRAPTYPE arced around the curved side of a cylinder" width="380">
 </p>
 
 <p align="center"><em>Every glyph above is a live <code>&lt;span&gt;</code> placed in 3D by CSS3DRenderer — selectable, styleable, animatable.</em></p>
@@ -286,7 +286,7 @@ The DOM renderer creates **one HTML element per character instance**, so cost sc
 ## Contributing
 
 ```bash
-git clone https://github.com/Liiift-Studio/wrapType.git
+git clone https://github.com/over-punch/wrapType.git
 cd wrapType
 npm install
 
@@ -301,4 +301,4 @@ The package source lives in `src/` (`core/` is framework-agnostic; `react/` hold
 
 MIT © [Liiift Studio](https://liiift.studio)
 
-Part of [type-tools](https://github.com/Liiift-Studio/type-tools) — a suite of typographic tools for techniques that are impossible or impractical in CSS alone.
+Part of [type-tools](https://github.com/over-punch/type-tools) — a suite of typographic tools for techniques that are impossible or impractical in CSS alone.

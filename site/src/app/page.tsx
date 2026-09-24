@@ -15,7 +15,7 @@ export default function Home() {
 				eyebrow="text-on-mesh warping"
 				title={[{ text: "Text on a surface," }, { text: "still real DOM.", italic: true, subtle: true }]}
 				install="@overpunch/wraptype"
-				github="https://github.com/Liiift-Studio/wrapType"
+				github="https://github.com/over-punch/wrapType"
 				tech={["TypeScript", "Three.js CSS3DRenderer", "React + Vanilla JS"]}
 			>
 				<p className="text-base leading-relaxed max-w-lg">
