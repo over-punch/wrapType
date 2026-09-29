@@ -299,6 +299,6 @@ The package source lives in `src/` (`core/` is framework-agnostic; `react/` hold
 
 ## License
 
-MIT © [Liiift Studio](https://liiift.studio)
+MIT © [Liiift Studio](https://overpunch.ca)
 
 Part of [type-tools](https://github.com/over-punch/type-tools) — a suite of typographic tools for techniques that are impossible or impractical in CSS alone.
