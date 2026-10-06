@@ -460,3 +460,61 @@ describe('surfaceFrame pole degenerate', () => {
 		}
 	})
 })
+
+// ─── Review fixes (2026-10) ──────────────────────────────────────────────────
+
+describe('review fixes', () => {
+	const cross = (a: [number, number, number], b: [number, number, number]): [number, number, number] =>
+		[a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+	const shapes: WrapTypeShape[] = ['sphere', 'cylinder', 'torus', 'plane', 'stool', 'flag']
+	const fills = ['cover', 'flow'] as const
+
+	it('every frame reads from outside the surface: right × up = normal (no mirrored glyphs)', () => {
+		for (const shape of shapes) for (const fill of fills) {
+			for (const cp of getCharPositions({ text: 'Reading', shape, fill, fontSize: 30 })) {
+				expect(dot(cross(cp.right, cp.up), cp.normal)).toBeGreaterThan(0.99)
+			}
+		}
+	})
+
+	it('characters advance along their reading direction', () => {
+		const ps = getCharPositions({ text: 'ABCDEFGH', shape: 'cylinder', fill: 'flow', repeat: false, fontSize: 30 })
+		for (let i = 1; i < ps.length; i++) {
+			const step: [number, number, number] = [0, 1, 2].map((k) => ps[i].position[k] - ps[i - 1].position[k]) as [number, number, number]
+			expect(dot(step, ps[i - 1].right)).toBeGreaterThan(0)
+		}
+	})
+
+	it('keeps graphemes whole (emoji sequences, combining marks)', () => {
+		const ps = getCharPositions({ text: '👩‍👩‍👧 é', shape: 'sphere', fill: 'flow', repeat: false })
+		expect(ps.map((p) => p.char)).toEqual(['👩‍👩‍👧', ' ', 'é'])
+	})
+
+	it('uses measured widths: a wide character advances further than a narrow one', () => {
+		const widths = new Map([['i', 4], ['W', 20]])
+		const ps = getCharPositions({ text: 'iW', shape: 'plane', repeat: false, charWidthMap: widths, fontSize: 20 })
+		expect(ps[1].position[0] - ps[0].position[0]).toBeCloseTo(4 / 2 + 20 / 2, 3)
+	})
+
+	it('invalid sizes fall back instead of hanging or returning nothing', () => {
+		for (const bad of [0, -5, NaN, Infinity]) {
+			const ps = getCharPositions({ text: 'abc', fontSize: bad, radius: bad })
+			expect(ps.length).toBeGreaterThan(0)
+			expect(ps.length).toBeLessThanOrEqual(20000)
+			ps.forEach((p) => p.position.forEach((v) => expect(Number.isFinite(v)).toBe(true)))
+		}
+	})
+
+	it('full-width scales the text to fit the equator once, without overlap', () => {
+		const ps = getCharPositions({ text: 'Typography', shape: 'sphere', fill: 'full-width', radius: 100, fontSize: 14 })
+		expect(ps).toHaveLength(10)
+		expect(ps[0].scale).toBeGreaterThan(1)
+	})
+
+	it('flow text longer than the ring is cut, not drawn on top of itself', () => {
+		const ps = getCharPositions({ text: 'x'.repeat(500), shape: 'cylinder', fill: 'flow', radius: 50, fontSize: 14, repeat: false })
+		expect(ps.length).toBeLessThan(500)
+		const keys = new Set(ps.map((p) => p.position.map((v) => v.toFixed(1)).join(',')))
+		expect(keys.size).toBe(ps.length)
+	})
+})

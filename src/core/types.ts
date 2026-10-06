@@ -80,6 +80,13 @@ export interface WrapTypeOptions {
 	 * re-rendering the scene.
 	 */
 	characterCurve?: number
+	/**
+	 * Show characters on the far side of the surface (seen through it, mirrored). Default: false —
+	 * characters facing away from the camera are hidden (CSS backface-visibility).
+	 */
+	showBackfaces?: boolean
+	/** Let the mouse wheel / pinch zoom the camera (orbit camera only). Default: true */
+	zoom?: boolean
 }
 
 /**
@@ -95,8 +102,10 @@ export interface CharPosition {
 	normal: [number, number, number]
 	/** Surface tangent pointing in the reading direction (right/eastward) */
 	right: [number, number, number]
-	/** Surface tangent pointing upward along the surface */
+	/** Surface tangent pointing upward along the surface (right × up = normal) */
 	up: [number, number, number]
+	/** Size factor for this character (full-width fill scales the text to fit); 1 when absent */
+	scale?: number
 }
 
 /** CSS class applied to the scene container */

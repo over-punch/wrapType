@@ -1,556 +1,421 @@
-// wrapType/src/core/geometry.ts — character position computation for each shape and fill mode
+// wrapType/src/core/geometry.ts — character position computation for each shape and fill mode.
+// Characters advance by their measured widths (charWidthMap) and every frame reads correctly from outside
+// the surface: right × up = normal, with characters advancing along right.
 
 import type { WrapTypeOptions, CharPosition, WrapTypeShape } from './types'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+type Vec3 = [number, number, number]
+
+// ─── Limits and validation ────────────────────────────────────────────────────
+
+/** Most character positions computed for one layout (a DOM node each); more are left out with a warning. */
+export const MAX_POSITIONS = 20000
+
+/** Warnings already printed. */
+const warned = new Set<string>()
+
+/** Prints a console warning the first time it is seen. */
+function warnOnce(message: string): void {
+	if (warned.has(message)) return
+	warned.add(message)
+	console.warn(message)
+}
+
+/** A finite number within [min, max]; the fallback (with a warning) when the value is not a finite number. */
+function sizeOption(value: unknown, fallback: number, min: number, max: number, name: string): number {
+	if (value === undefined) return fallback
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		warnOnce(`[wrapType] ${name} must be a finite number; got ${String(value)}, using ${fallback}`)
+		return fallback
+	}
+	if (value <= 0 && min > 0) {
+		warnOnce(`[wrapType] ${name} must be greater than 0; got ${value}, using ${fallback}`)
+		return fallback
+	}
+	if (value < min || value > max) {
+		warnOnce(`[wrapType] ${name} must be between ${min} and ${max}; got ${value}`)
+		return Math.min(max, Math.max(min, value))
+	}
+	return value
+}
+
+/** Options with every size validated, so no layout can loop forever or produce NaN. */
+interface Layout {
+	chars: string[]
+	r: number
+	h: number | undefined
+	fs: number
+	advRatio: number
+	lineRatio: number
+	widths: Map<string, number> | undefined
+	repeat: boolean
+}
+
+/** Grapheme segmenter: emoji sequences and combining marks stay in one slot. */
+const graphemeSegmenter: { segment: (t: string) => Iterable<{ segment: string }> } | null =
+	typeof Intl !== 'undefined' && 'Segmenter' in Intl
+		? new (Intl as unknown as { Segmenter: new (l: undefined, o: { granularity: 'grapheme' }) => { segment: (t: string) => Iterable<{ segment: string }> } }).Segmenter(undefined, { granularity: 'grapheme' })
+		: null
+
+/** Split text into graphemes (code points when Intl.Segmenter is unavailable). */
+export function splitGraphemes(text: string): string[] {
+	return graphemeSegmenter ? Array.from(graphemeSegmenter.segment(text), (s) => s.segment) : Array.from(text)
+}
+
+/** Validate options into a layout. */
+function layoutFor(opts: WrapTypeOptions, defaultRadius = 300): Layout {
+	if (!opts.text) warnOnce('[wrapType] opts.text is empty — falling back to "Type".')
+	const chars = splitGraphemes(opts.text || 'Type')
+	const r = sizeOption(opts.radius, defaultRadius, 1, 10000, 'radius')
+	return {
+		chars,
+		r,
+		h: opts.height === undefined ? undefined : sizeOption(opts.height, r * 2, 1, 20000, 'height'),
+		fs: sizeOption(opts.fontSize, 14, 1, 1000, 'fontSize'),
+		advRatio: sizeOption(opts.charAdvanceRatio, 0.62, 0.05, 10, 'charAdvanceRatio'),
+		lineRatio: sizeOption(opts.lineHeightRatio, 1.4, 0.2, 10, 'lineHeightRatio'),
+		widths: opts.charWidthMap,
+		repeat: opts.repeat !== false,
+	}
+}
+
+/** The advance width of a character: measured when available, else fontSize × charAdvanceRatio. */
+function advance(L: Layout, char: string): number {
+	const w = L.widths?.get(char)
+	return w !== undefined && Number.isFinite(w) && w > 0 ? w : L.fs * L.advRatio
+}
+
+// ─── Vector helpers ───────────────────────────────────────────────────────────
 
 /** Normalise a 3-vector */
-function norm(v: [number, number, number]): [number, number, number] {
+function norm(v: Vec3): Vec3 {
 	const len = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
 	if (len === 0) return [0, 1, 0]
 	return [v[0] / len, v[1] / len, v[2] / len]
 }
 
 /** Cross product of two 3-vectors */
-function cross(
-	a: [number, number, number],
-	b: [number, number, number],
-): [number, number, number] {
-	return [
-		a[1] * b[2] - a[2] * b[1],
-		a[2] * b[0] - a[0] * b[2],
-		a[0] * b[1] - a[1] * b[0],
-	]
+function cross(a: Vec3, b: Vec3): Vec3 {
+	return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 }
 
 /** Dot product of two 3-vectors */
-function dot(a: [number, number, number], b: [number, number, number]): number {
+function dot(a: Vec3, b: Vec3): number {
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-/**
- * Compute right/up orientation vectors for a surface point.
- * right = eastward tangent (reading direction)
- * up    = northward tangent on surface
- * Both are perpendicular to normal.
- */
-function surfaceFrame(
-	normal: [number, number, number],
-): { right: [number, number, number]; up: [number, number, number] } {
-	const worldUp: [number, number, number] =
-		Math.abs(dot(normal, [0, 1, 0])) > 0.99
-			? [0, 0, 1]  // degenerate at poles — use Z as reference
-			: [0, 1, 0]
+/** A reading frame for an outward normal, with up as close to world +Y as possible: right × up = normal. */
+function surfaceFrame(normal: Vec3): { right: Vec3; up: Vec3 } {
+	const worldUp: Vec3 = Math.abs(dot(normal, [0, 1, 0])) > 0.99 ? [0, 0, -1] : [0, 1, 0]
 	const right = norm(cross(worldUp, normal))
-	const up    = norm(cross(normal, right))
+	const up = norm(cross(normal, right))
 	return { right, up }
 }
 
+// ─── Runs of text ─────────────────────────────────────────────────────────────
+
+/**
+ * Lay characters along a run of the given length, by their advance widths. Returns each character with the
+ * offset of its centre from the start of the run (0…length) and its scale (1 unless fit is 'scale').
+ *
+ * - closed runs (rings) are justified so the text meets itself without a seam or overlap;
+ * - with repeat (default), the text cycles to fill the run; without, each character appears once, and what
+ *   doesn't fit is left out (with a warning).
+ */
+function run(
+	L: Layout, startIdx: number, length: number,
+	opt: { closed: boolean; justify: boolean; scaleToFit?: boolean },
+): { chars: string[]; offsets: number[]; scale: number; nextIdx: number } {
+	const chars: string[] = []
+	const widths: number[] = []
+	let used = 0
+	let i = startIdx
+	if (opt.scaleToFit) {
+		// The whole text, once, scaled to fill the run exactly.
+		for (const c of L.chars) { chars.push(c); widths.push(advance(L, c)); used += advance(L, c) }
+		const scale = used > 0 ? length / used : 1
+		let x = 0
+		const offsets = widths.map((w) => { const o = (x + w / 2) * scale; x += w; return o })
+		return { chars, offsets, scale, nextIdx: L.chars.length }
+	}
+	while (chars.length < MAX_POSITIONS) {
+		if (!L.repeat && i >= L.chars.length) break
+		const c = L.chars[i % L.chars.length]
+		const w = advance(L, c)
+		if (chars.length > 0 && used + w > length) break
+		if (chars.length === 0 && w > length) break
+		chars.push(c)
+		widths.push(w)
+		used += w
+		i++
+	}
+	if (!L.repeat && i < L.chars.length && startIdx === 0) {
+		warnOnce(`[wrapType] the text is longer than the surface; ${L.chars.length - i} characters were left out`)
+	}
+	const slots = opt.closed ? chars.length : chars.length - 1
+	const gap = opt.justify && L.repeat && slots > 0 ? Math.max(0, length - used) / slots : 0
+	let x = 0
+	const offsets = widths.map((w) => { const o = x + w / 2; x += w + gap; return o })
+	return { chars, offsets, scale: 1, nextIdx: i }
+}
+
+// ─── Rings (sphere latitudes, cylinder rows, torus, stool) ────────────────────
+
+/**
+ * Characters around a horizontal ring of radius ringR at height y, reading left to right from outside.
+ * Characters advance clockwise seen from above (decreasing angle), so they read correctly.
+ */
+function ring(
+	L: Layout, startIdx: number, centre: Vec3, ringR: number, y: number,
+	normalAt: (theta: number) => Vec3, closed = true, justify = true, scaleToFit = false,
+): { positions: CharPosition[]; nextIdx: number } {
+	const circ = 2 * Math.PI * ringR
+	const { chars, offsets, scale, nextIdx } = run(L, startIdx, circ, { closed, justify, scaleToFit })
+	const positions = chars.map((char, k) => {
+		const theta = -offsets[k] / ringR
+		const position: Vec3 = [centre[0] + ringR * Math.cos(theta), y, centre[2] + ringR * Math.sin(theta)]
+		const normal = normalAt(theta)
+		// Reading direction: the clockwise tangent; up completes a right-handed frame (right × up = normal).
+		const right: Vec3 = [Math.sin(theta), 0, -Math.cos(theta)]
+		const up = norm(cross(normal, right))
+		const cp: CharPosition = { char, position, normal, right, up }
+		if (scale !== 1) cp.scale = scale
+		return cp
+	})
+	return { positions, nextIdx }
+}
+
+/** Radial horizontal normal. */
+const radial = (theta: number): Vec3 => [Math.cos(theta), 0, Math.sin(theta)]
+
 // ─── Sphere ───────────────────────────────────────────────────────────────────
 
-/**
- * Place characters around the sphere equator (flow mode).
- * Text repeats to fill the full circumference.
- */
-function sphereFlow(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r      = opts.radius ?? 300
-	const adv    = (opts.fontSize ?? 14) * (opts.charAdvanceRatio ?? 0.62)
-	const total  = Math.max(text.length, Math.ceil(2 * Math.PI * r / adv))
-	const step   = adv / r  // radians per character
-
-	const positions: CharPosition[] = []
-	for (let i = 0; i < total; i++) {
-		const theta  = i * step
-		const x      = r * Math.cos(theta)
-		const z      = r * Math.sin(theta)
-		const normal = norm([x, 0, z])
-		const right: [number, number, number] = [-Math.sin(theta), 0, Math.cos(theta)]
-		const up: [number, number, number]    = [0, 1, 0]
-		positions.push({ char: text[i % text.length], position: [x, 0, z], normal, right, up })
-	}
-	return positions
+/** Characters around the sphere's equator (flow mode). */
+function sphereFlow(L: Layout): CharPosition[] {
+	return ring(L, 0, [0, 0, 0], L.r, 0, radial, true, true).positions
 }
 
-/**
- * Tile characters across the sphere surface in latitude bands (cover mode).
- * Text repeats to fill all bands.
- */
-function sphereCover(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r      = opts.radius ?? 300
-	const fs     = opts.fontSize ?? 14
-	const adv    = fs * (opts.charAdvanceRatio ?? 0.62)
-	const lineH  = fs * (opts.lineHeightRatio  ?? 1.4)
-
-	// Avoid poles (top and bottom 12°)
+/** Latitude bands over the sphere (cover mode); the text continues from band to band. */
+function sphereCover(L: Layout): CharPosition[] {
+	const lineH = L.fs * L.lineRatio
 	const phiMin = Math.PI * 0.12
 	const phiMax = Math.PI * 0.88
-	const bands  = Math.max(1, Math.floor((phiMax - phiMin) * r / lineH))
-
+	const bands = Math.max(1, Math.floor((phiMax - phiMin) * L.r / lineH))
 	const positions: CharPosition[] = []
 	let idx = 0
-
-	for (let b = 0; b <= bands; b++) {
-		const phi    = phiMin + (b / bands) * (phiMax - phiMin)
-		const y      = r * Math.cos(phi)
-		const ringR  = r * Math.sin(phi)
-		const count  = Math.max(1, Math.ceil(2 * Math.PI * ringR / adv))
-
-		for (let c = 0; c < count; c++) {
-			const theta  = (c / count) * 2 * Math.PI
-			const x      = ringR * Math.cos(theta)
-			const z      = ringR * Math.sin(theta)
-			const normal: [number, number, number] = norm([x, y, z])
-
-			// Reading direction: tangent to latitude circle (eastward)
-			const right: [number, number, number] = [-Math.sin(theta), 0, Math.cos(theta)]
-			// Up on surface: northward meridian direction
-			const cosPhi = Math.cos(phi)
-			const sinPhi = Math.sin(phi)
-			const up: [number, number, number] = [
-				-cosPhi * Math.cos(theta),
-				sinPhi,
-				-cosPhi * Math.sin(theta),
-			]
-
-			positions.push({ char: text[idx % text.length], position: [x, y, z], normal, right, up })
-			idx++
-		}
+	for (let b = 0; b <= bands && positions.length < MAX_POSITIONS; b++) {
+		const phi = phiMin + (b / bands) * (phiMax - phiMin)
+		const y = L.r * Math.cos(phi)
+		const ringR = L.r * Math.sin(phi)
+		const band = ring(L, idx, [0, 0, 0], ringR, y, (theta) => norm([ringR * Math.cos(theta), y, ringR * Math.sin(theta)]))
+		positions.push(...band.positions)
+		idx = band.nextIdx
+		if (!L.repeat && idx >= L.chars.length) break
 	}
 	return positions
 }
 
-/**
- * Scale text to fill exactly the sphere's widest point (equator) in one pass.
- * Characters are placed at equal arc length with fontSize scaled to fit.
- */
-function sphereFullWidth(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r          = opts.radius ?? 300
-	const circ       = 2 * Math.PI * r
-	const scaledAdv  = circ / text.length
-	const step       = scaledAdv / r
-
-	return text.split('').map((char, i) => {
-		const theta  = i * step
-		const x      = r * Math.cos(theta)
-		const z      = r * Math.sin(theta)
-		const normal = norm([x, 0, z])
-		const right: [number, number, number] = [-Math.sin(theta), 0, Math.cos(theta)]
-		const up: [number, number, number]    = [0, 1, 0]
-		return { char, position: [x, 0, z], normal, right, up }
-	})
+/** The text once around the equator, scaled to fit it exactly (full-width mode). */
+function sphereFullWidth(L: Layout): CharPosition[] {
+	return ring(L, 0, [0, 0, 0], L.r, 0, radial, true, false, true).positions
 }
 
-/**
- * Place text in a single vertical strip running pole-to-pole (full-height mode).
- * Characters repeat down the meridian.
- */
-function sphereFullHeight(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r      = opts.radius ?? 300
-	const fs     = opts.fontSize ?? 14
-	const lineH  = fs * (opts.lineHeightRatio ?? 1.4)
+/** One character per line down a meridian, top to bottom (full-height mode). */
+function sphereFullHeight(L: Layout): CharPosition[] {
+	const lineH = L.fs * L.lineRatio
 	const phiMin = Math.PI * 0.05
 	const phiMax = Math.PI * 0.95
-	const total  = Math.ceil((phiMax - phiMin) * r / lineH)
-
+	const total = Math.min(MAX_POSITIONS, Math.ceil((phiMax - phiMin) * L.r / lineH), L.repeat ? Infinity : L.chars.length)
 	const positions: CharPosition[] = []
 	for (let i = 0; i < total; i++) {
-		const phi    = phiMin + (i / total) * (phiMax - phiMin)
-		const x      = r * Math.sin(phi)
-		const y      = r * Math.cos(phi)
-		const z      = 0
-		const normal = norm([x, y, z])
-		const { right, up } = surfaceFrame(normal)
-		positions.push({ char: text[i % text.length], position: [x, y, z], normal, right, up })
+		const phi = phiMin + (i / total) * (phiMax - phiMin)
+		const position: Vec3 = [0, L.r * Math.cos(phi), L.r * Math.sin(phi)]
+		const normal = norm(position)
+		positions.push({ char: L.chars[i % L.chars.length], position, normal, ...surfaceFrame(normal) })
 	}
 	return positions
 }
 
 // ─── Cylinder ─────────────────────────────────────────────────────────────────
 
-/** Place characters around the cylinder circumference in a single band (flow). */
-function cylinderFlow(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r     = opts.radius ?? 300
-	const adv   = (opts.fontSize ?? 14) * (opts.charAdvanceRatio ?? 0.62)
-	const total = Math.max(text.length, Math.ceil(2 * Math.PI * r / adv))
-	const step  = adv / r
-
-	return Array.from({ length: total }, (_, i) => {
-		const theta  = i * step
-		const x      = r * Math.cos(theta)
-		const z      = r * Math.sin(theta)
-		const normal: [number, number, number] = [Math.cos(theta), 0, Math.sin(theta)]
-		const right: [number, number, number]  = [-Math.sin(theta), 0, Math.cos(theta)]
-		const up: [number, number, number]     = [0, 1, 0]
-		return { char: text[i % text.length], position: [x, 0, z], normal, right, up }
-	})
+/** Characters around the cylinder in a single band (flow). */
+function cylinderFlow(L: Layout): CharPosition[] {
+	return ring(L, 0, [0, 0, 0], L.r, 0, radial).positions
 }
 
-/** Tile characters across the full cylinder surface in rows (cover). */
-function cylinderCover(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r      = opts.radius ?? 300
-	const h      = opts.height ?? r * 2
-	const fs     = opts.fontSize ?? 14
-	const adv    = fs * (opts.charAdvanceRatio ?? 0.62)
-	const lineH  = fs * (opts.lineHeightRatio  ?? 1.4)
-	const rows   = Math.max(1, Math.ceil(h / lineH))
-	const cols   = Math.max(1, Math.ceil(2 * Math.PI * r / adv))
-	const step   = (2 * Math.PI) / cols
-
+/** Rows over the full cylinder (cover), top to bottom. */
+function cylinderCover(L: Layout): CharPosition[] {
+	const h = L.h ?? L.r * 2
+	const lineH = L.fs * L.lineRatio
+	const rows = Math.max(1, Math.ceil(h / lineH))
 	const positions: CharPosition[] = []
 	let idx = 0
-
-	for (let row = 0; row < rows; row++) {
-		const y = -h / 2 + (row + 0.5) * lineH
-		for (let col = 0; col < cols; col++) {
-			const theta  = col * step
-			const x      = r * Math.cos(theta)
-			const z      = r * Math.sin(theta)
-			const normal: [number, number, number] = [Math.cos(theta), 0, Math.sin(theta)]
-			const right: [number, number, number]  = [-Math.sin(theta), 0, Math.cos(theta)]
-			const up: [number, number, number]     = [0, 1, 0]
-			positions.push({ char: text[idx % text.length], position: [x, y, z], normal, right, up })
-			idx++
-		}
+	for (let row = 0; row < rows && positions.length < MAX_POSITIONS; row++) {
+		const y = h / 2 - (row + 0.5) * lineH
+		const r = ring(L, idx, [0, 0, 0], L.r, y, radial)
+		positions.push(...r.positions)
+		idx = r.nextIdx
+		if (!L.repeat && idx >= L.chars.length) break
 	}
 	return positions
 }
 
 // ─── Torus ────────────────────────────────────────────────────────────────────
 
-/** Place characters around the outer torus ring (flow). */
-function torusFlow(text: string, opts: WrapTypeOptions): CharPosition[] {
-	// Major radius R (center of tube to center of torus), minor radius r (tube radius)
-	const R    = opts.radius ?? 300
-	const r    = Math.round(R * 0.3)  // tube radius = 30% of major radius
-	const adv  = (opts.fontSize ?? 14) * (opts.charAdvanceRatio ?? 0.62)
-	const circ = 2 * Math.PI * (R + r)  // outer circumference
-	const total = Math.max(text.length, Math.ceil(circ / adv))
-	const step  = adv / (R + r)
-
-	return Array.from({ length: total }, (_, i) => {
-		const phi    = i * step  // angle around the torus ring
-		const x      = (R + r) * Math.cos(phi)
-		const z      = (R + r) * Math.sin(phi)
-		const y      = 0
-		const normal = norm([Math.cos(phi), 0, Math.sin(phi)])
-		const right: [number, number, number]  = [-Math.sin(phi), 0, Math.cos(phi)]
-		const up: [number, number, number]     = [0, 1, 0]
-		return { char: text[i % text.length], position: [x, y, z], normal, right, up }
-	})
+/** Characters around the torus's outer ring (flow). */
+function torusFlow(L: Layout): CharPosition[] {
+	const tube = L.r * 0.3
+	return ring(L, 0, [0, 0, 0], L.r + tube, 0, radial).positions
 }
 
-/** Tile characters across the full torus surface (cover). */
-function torusCover(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const R      = opts.radius ?? 300
-	const r      = Math.round(R * 0.3)
-	const fs     = opts.fontSize ?? 14
-	const adv    = fs * (opts.charAdvanceRatio ?? 0.62)
-	const lineH  = fs * (opts.lineHeightRatio ?? 1.4)
-	const majCols = Math.max(1, Math.ceil(2 * Math.PI * R / adv))
-	const minRows = Math.max(1, Math.ceil(2 * Math.PI * r / lineH))
-	const majStep = (2 * Math.PI) / majCols
-	const minStep = (2 * Math.PI) / minRows
-
+/** Rings over the whole torus surface (cover): one ring of text per tube angle. */
+function torusCover(L: Layout): CharPosition[] {
+	const R = L.r
+	const tube = L.r * 0.3
+	const lineH = L.fs * L.lineRatio
+	const rows = Math.max(1, Math.ceil(2 * Math.PI * tube / lineH))
 	const positions: CharPosition[] = []
 	let idx = 0
-
-	for (let row = 0; row < minRows; row++) {
-		const theta = row * minStep  // angle around the tube
-		for (let col = 0; col < majCols; col++) {
-			const phi  = col * majStep  // angle around the major ring
-			const dist = R + r * Math.cos(theta)
-			const x    = dist * Math.cos(phi)
-			const z    = dist * Math.sin(phi)
-			const y    = r * Math.sin(theta)
-
-			// Outward normal (away from the tube center)
-			const nx = Math.cos(theta) * Math.cos(phi)
-			const ny = Math.sin(theta)
-			const nz = Math.cos(theta) * Math.sin(phi)
-			const normal: [number, number, number] = [nx, ny, nz]
-			const { right, up } = surfaceFrame(normal)
-
-			positions.push({ char: text[idx % text.length], position: [x, y, z], normal, right, up })
-			idx++
-		}
+	for (let row = 0; row < rows && positions.length < MAX_POSITIONS; row++) {
+		// From the top of the tube, outward and down, under and back in.
+		const a = Math.PI / 2 - (row / rows) * 2 * Math.PI
+		const ringR = R + tube * Math.cos(a)
+		const y = tube * Math.sin(a)
+		const r = ring(L, idx, [0, 0, 0], ringR, y, (theta) => norm([Math.cos(a) * Math.cos(theta), Math.sin(a), Math.cos(a) * Math.sin(theta)]))
+		positions.push(...r.positions)
+		idx = r.nextIdx
+		if (!L.repeat && idx >= L.chars.length) break
 	}
 	return positions
 }
 
 // ─── Plane ────────────────────────────────────────────────────────────────────
 
-/** Tile characters across a flat plane facing the camera (cover). */
-function planeCover(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const size   = (opts.radius ?? 300) * 2
-	const fs     = opts.fontSize ?? 14
-	const adv    = fs * (opts.charAdvanceRatio ?? 0.62)
-	const lineH  = fs * (opts.lineHeightRatio ?? 1.4)
-	const cols   = Math.max(1, Math.ceil(size / adv))
-	const rows   = Math.max(1, Math.ceil(size / lineH))
-
+/** Rows across a flat square facing the camera (+Z), top to bottom. */
+function planeCover(L: Layout): CharPosition[] {
+	const size = L.r * 2
+	const lineH = L.fs * L.lineRatio
+	const rows = Math.max(1, Math.floor(size / lineH))
 	const positions: CharPosition[] = []
 	let idx = 0
-
-	for (let row = 0; row < rows; row++) {
+	for (let row = 0; row < rows && positions.length < MAX_POSITIONS; row++) {
 		const y = size / 2 - (row + 0.5) * lineH
-		for (let col = 0; col < cols; col++) {
-			const x = -size / 2 + (col + 0.5) * adv
-			const normal: [number, number, number] = [0, 0, 1]
-			const right: [number, number, number]  = [1, 0, 0]
-			const up: [number, number, number]     = [0, 1, 0]
-			positions.push({ char: text[idx % text.length], position: [x, y, 0], normal, right, up })
-			idx++
-		}
+		const { chars, offsets, nextIdx } = run(L, idx, size, { closed: false, justify: true })
+		idx = nextIdx
+		chars.forEach((char, k) => {
+			positions.push({ char, position: [-size / 2 + offsets[k], y, 0], normal: [0, 0, 1], right: [1, 0, 0], up: [0, 1, 0] })
+		})
+		if (!L.repeat && idx >= L.chars.length) break
 	}
 	return positions
 }
 
 // ─── Stool ────────────────────────────────────────────────────────────────────
 
-/**
- * Place characters in a single band around the stool's seat rim (flow mode).
- * The seat rim is a cylinder at the top of the stool — gives a clean circular
- * silhouette and is the lowest element count of any stool fill.
- */
-function stoolFlow(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r      = opts.radius ?? 200
-	const seatY  = r * 0.55            // seat elevation above origin
-	const adv    = (opts.fontSize ?? 14) * (opts.charAdvanceRatio ?? 0.62)
-	const total  = Math.max(text.length, Math.ceil(2 * Math.PI * r / adv))
-	const step   = adv / r
-
-	return Array.from({ length: total }, (_, i) => {
-		const theta   = i * step
-		const x       = r * Math.cos(theta)
-		const z       = r * Math.sin(theta)
-		const normal: [number, number, number] = [Math.cos(theta), 0, Math.sin(theta)]
-		const right: [number, number, number]  = [-Math.sin(theta), 0, Math.cos(theta)]
-		const up: [number, number, number]     = [0, 1, 0]
-		return { char: text[i % text.length], position: [x, seatY, z], normal, right, up }
-	})
+/** A single band around the stool's seat rim (flow). */
+function stoolFlow(L: Layout): CharPosition[] {
+	return ring(L, 0, [0, 0, 0], L.r, L.r * 0.55, radial).positions
 }
 
-/**
- * Cover the stool surface — seat top (flat disk), seat rim (short cylinder),
- * and four legs (thin cylinders at the corners).
- */
-function stoolCover(text: string, opts: WrapTypeOptions): CharPosition[] {
-	const r         = opts.radius ?? 200
-	const seatY     = r * 0.55
+/** Seat top (read from above), seat rim, and four legs (cover). */
+function stoolCover(L: Layout): CharPosition[] {
+	const r = L.r
+	const seatY = r * 0.55
 	const seatThick = r * 0.08
 	const legRadius = Math.max(8, r * 0.07)
-	const legOffset = r * 0.58          // XZ distance of each leg from centre
+	const legOffset = r * 0.58
 	const legBottom = -r * 1.2
 	const legHeight = seatY - legBottom
-	const fs        = opts.fontSize ?? 14
-	const adv       = fs * (opts.charAdvanceRatio ?? 0.62)
-	const lineH     = fs * (opts.lineHeightRatio  ?? 1.4)
-
+	const lineH = L.fs * L.lineRatio
 	const positions: CharPosition[] = []
 	let idx = 0
 
-	// — Seat top (flat disk, normal pointing up) ——————————————————————————
-	const gridStep = adv
-	const steps    = Math.ceil(r * 2 / gridStep)
-	for (let row = 0; row < steps; row++) {
-		for (let col = 0; col < steps; col++) {
-			const x = -r + (col + 0.5) * gridStep
-			const z = -r + (row + 0.5) * gridStep
-			if (x * x + z * z > r * r) continue   // skip outside disk
-			const normal: [number, number, number] = [0, 1, 0]
-			const right: [number, number, number]  = [1, 0, 0]
-			const up: [number, number, number]     = [0, 0, -1]
-			positions.push({ char: text[idx++ % text.length], position: [x, seatY, z], normal, right, up })
-		}
+	// Seat top: rows across the disk, read from above (front edge toward +Z).
+	const rows = Math.floor((r * 2) / lineH)
+	for (let row = 0; row < rows && positions.length < MAX_POSITIONS; row++) {
+		const z = -r + (row + 0.5) * lineH
+		const half = Math.sqrt(Math.max(0, r * r - z * z))
+		if (half < L.fs) continue
+		const { chars, offsets, nextIdx } = run(L, idx, half * 2, { closed: false, justify: true })
+		idx = nextIdx
+		chars.forEach((char, k) => {
+			positions.push({ char, position: [-half + offsets[k], seatY, z], normal: [0, 1, 0], right: [1, 0, 0], up: [0, 0, -1] })
+		})
 	}
 
-	// — Seat rim (short cylinder) —————————————————————————————————————————
-	const rimCols = Math.ceil(2 * Math.PI * r / adv)
+	// Seat rim.
 	const rimRows = Math.max(1, Math.ceil(seatThick / lineH))
 	for (let row = 0; row < rimRows; row++) {
-		const y = seatY - seatThick + (row + 0.5) * lineH
-		for (let col = 0; col < rimCols; col++) {
-			const theta   = (col / rimCols) * 2 * Math.PI
-			const x       = r * Math.cos(theta)
-			const z       = r * Math.sin(theta)
-			const normal: [number, number, number] = [Math.cos(theta), 0, Math.sin(theta)]
-			const right: [number, number, number]  = [-Math.sin(theta), 0, Math.cos(theta)]
-			const up: [number, number, number]     = [0, 1, 0]
-			positions.push({ char: text[idx++ % text.length], position: [x, y, z], normal, right, up })
-		}
+		const band = ring(L, idx, [0, 0, 0], r, seatY - seatThick + (row + 0.5) * lineH, radial)
+		positions.push(...band.positions)
+		idx = band.nextIdx
 	}
 
-	// — Four legs (thin cylinders at ±legOffset corners) —————————————————
-	const legCorners: [number, number][] = [
-		[ legOffset,  legOffset],
-		[-legOffset,  legOffset],
-		[ legOffset, -legOffset],
-		[-legOffset, -legOffset],
-	]
+	// Four legs.
 	const legRows = Math.ceil(legHeight / lineH)
-	const legCols = Math.max(1, Math.ceil(2 * Math.PI * legRadius / adv))
-
-	for (const [lx, lz] of legCorners) {
-		for (let row = 0; row < legRows; row++) {
-			const y = legBottom + (row + 0.5) * lineH
-			for (let col = 0; col < legCols; col++) {
-				const theta   = (col / legCols) * 2 * Math.PI
-				const nx      = Math.cos(theta)
-				const nz      = Math.sin(theta)
-				const normal: [number, number, number] = [nx, 0, nz]
-				const right: [number, number, number]  = [-Math.sin(theta), 0, Math.cos(theta)]
-				const up: [number, number, number]     = [0, 1, 0]
-				positions.push({
-					char: text[idx++ % text.length],
-					position: [lx + legRadius * nx, y, lz + legRadius * nz],
-					normal, right, up,
-				})
-			}
+	for (const [lx, lz] of [[legOffset, legOffset], [-legOffset, legOffset], [legOffset, -legOffset], [-legOffset, -legOffset]]) {
+		for (let row = 0; row < legRows && positions.length < MAX_POSITIONS; row++) {
+			const band = ring(L, idx, [lx, 0, lz], legRadius, seatY - (row + 0.5) * lineH, radial)
+			positions.push(...band.positions)
+			idx = band.nextIdx
 		}
 	}
-
-	return positions
+	return L.repeat ? positions : positions.slice(0, L.chars.length)
 }
 
 // ─── Flag ─────────────────────────────────────────────────────────────────────
 
-/**
- * Compute one world-space point on the waving flag surface.
- * u ∈ [0,1]: 0 = mast (fixed), 1 = free edge (max displacement)
- * v ∈ [0,1]: 0 = bottom edge, 1 = top edge
- * Deformation is purely in Z so text reads naturally on the XY face.
- */
-function flagPoint(
-	u: number, v: number, t: number,
-	W: number, H: number, amp: number, omega: number, speed: number,
-): [number, number, number] {
-	const phase = u * omega * 2 * Math.PI - t * speed
-	return [
-		(u - 0.5) * W,
-		(v - 0.5) * H,
-		amp * Math.sin(phase) * u,
-	]
+/** Flag wave parameters for a layout. */
+function flagParams(L: Layout) {
+	return { W: L.r * 1.5, H: L.r, amp: L.r * 0.12, omega: 1.5, speed: 2.5 }
 }
 
 /**
- * Compute a CharPosition on the flag at grid coordinate (u, v, t).
- * Uses a tiny forward-difference step to derive the tangent and normal analytically.
+ * One world-space point on the waving flag surface.
+ * u ∈ [0,1]: 0 = mast (fixed), 1 = free edge; v ∈ [0,1]: 0 = bottom, 1 = top.
  */
-function flagCharAt(
-	char: string,
-	u: number, v: number, t: number,
-	W: number, H: number, amp: number, omega: number, speed: number,
-): CharPosition {
+function flagPoint(u: number, v: number, t: number, p: ReturnType<typeof flagParams>): Vec3 {
+	const phase = u * p.omega * 2 * Math.PI - t * p.speed
+	return [(u - 0.5) * p.W, (v - 0.5) * p.H, p.amp * Math.sin(phase) * u]
+}
+
+/** A character on the flag at (u, v, t), with its frame from the surface's tangent. */
+function flagCharAt(char: string, u: number, v: number, t: number, p: ReturnType<typeof flagParams>): CharPosition {
 	const EPS = 1e-4
-	const p   = flagPoint(u, v, t, W, H, amp, omega, speed)
-
-	// Use forward difference normally; backward at the free edge (u = 1)
-	// to avoid clamping that would collapse the tangent to zero.
-	let rawTangent: [number, number, number]
-	if (u <= 1 - EPS) {
-		const pDu = flagPoint(u + EPS, v, t, W, H, amp, omega, speed)
-		rawTangent = [pDu[0] - p[0], pDu[1] - p[1], pDu[2] - p[2]]
-	} else {
-		const pDu = flagPoint(u - EPS, v, t, W, H, amp, omega, speed)
-		rawTangent = [p[0] - pDu[0], p[1] - pDu[1], p[2] - pDu[2]]
-	}
-
-	// Tangent along reading direction (width-wise, +X on flag face)
-	const right = norm(rawTangent)
-
-	// Up is always world +Y — no vertical deformation in this wave model
-	const up: [number, number, number] = [0, 1, 0]
-
-	// Normal = right × up. Points toward viewer (+Z) when flag is flat.
+	const pt = flagPoint(u, v, t, p)
+	const other = flagPoint(u <= 1 - EPS ? u + EPS : u - EPS, v, t, p)
+	const tangent: Vec3 = u <= 1 - EPS
+		? [other[0] - pt[0], other[1] - pt[1], other[2] - pt[2]]
+		: [pt[0] - other[0], pt[1] - other[1], pt[2] - other[2]]
+	const right = norm(tangent)
+	const up: Vec3 = [0, 1, 0]
 	let normal = norm(cross(right, up))
-
-	// Guarantee outward facing (toward the +Z camera)
 	if (normal[2] < 0) normal = [-normal[0], -normal[1], -normal[2]]
-
-	return { char, position: p, normal, right, up }
+	return { char, position: pt, normal, right, up }
 }
 
-/**
- * Lay out one row of text across the flag width using measured advance widths.
- * Returns character strings and their centre u-positions (0 = mast, 1 = free edge).
- * Characters are justified: any leftover space is distributed between them so the
- * row fills W exactly — the same idea as fitWidth but applied per-row in 3D.
- */
-function flagRow(
-	text: string, startIdx: number,
-	W: number, adv: number,
-	widthMap: Map<string, number> | undefined,
-): { chars: string[]; us: number[]; nextIdx: number } {
-	const chars: string[] = []
-	let rowWidth = 0
-	let i = startIdx
-
-	// Greedily fill the row until the next character would overflow
-	while (true) {
-		const char  = text[i % text.length]
-		const charW = widthMap?.get(char) ?? adv
-		if (chars.length > 0 && rowWidth + charW > W) break
-		chars.push(char)
-		rowWidth += charW
-		i++
-		if (chars.length > 500) break   // safety cap
-	}
-
-	// Justify: spread leftover space evenly as inter-character gaps
-	const gap = chars.length > 1 ? (W - rowWidth) / (chars.length - 1) : 0
-
-	// Compute u for the centre of each character
-	const us: number[] = []
-	let xOffset = 0
-	for (const char of chars) {
-		const charW = widthMap?.get(char) ?? adv
-		us.push((xOffset + charW / 2) / W)
-		xOffset += charW + gap
-	}
-
-	return { chars, us, nextIdx: i }
-}
-
-/** Fill the entire flag surface with text, one justified row per horizontal band. */
-function flagCover(text: string, opts: WrapTypeOptions, t: number): CharPosition[] {
-	const W     = (opts.radius ?? 300) * 1.5
-	const H     = opts.radius ?? 300
-	const amp   = H * 0.12
-	const omega = 1.5
-	const speed = 2.5
-	const fs    = opts.fontSize ?? 14
-	const adv   = fs * (opts.charAdvanceRatio ?? 0.62)
-	const lineH = fs * (opts.lineHeightRatio  ?? 1.4)
-	const numRows = Math.max(1, Math.ceil(H / lineH))
-
+/** Rows across the whole flag (cover), justified, top to bottom. */
+function flagCover(L: Layout, t: number): CharPosition[] {
+	const p = flagParams(L)
+	const lineH = L.fs * L.lineRatio
+	const rows = Math.max(1, Math.floor(p.H / lineH))
 	const positions: CharPosition[] = []
-	let textIdx = 0
-
-	for (let row = 0; row < numRows; row++) {
-		const v = numRows > 1 ? row / (numRows - 1) : 0.5
-		const { chars, us, nextIdx } = flagRow(text, textIdx, W, adv, opts.charWidthMap)
-		textIdx = nextIdx
-		for (let i = 0; i < chars.length; i++) {
-			positions.push(flagCharAt(chars[i], us[i], v, t, W, H, amp, omega, speed))
-		}
+	let idx = 0
+	for (let row = 0; row < rows && positions.length < MAX_POSITIONS; row++) {
+		const v = rows > 1 ? 1 - row / (rows - 1) : 0.5
+		const { chars, offsets, nextIdx } = run(L, idx, p.W, { closed: false, justify: true })
+		idx = nextIdx
+		chars.forEach((char, k) => positions.push(flagCharAt(char, offsets[k] / p.W, v, t, p)))
+		if (!L.repeat && idx >= L.chars.length) break
 	}
 	return positions
 }
 
-/** Place a single justified row of text along the centre of the flag. */
-function flagFlow(text: string, opts: WrapTypeOptions, t: number): CharPosition[] {
-	const W     = (opts.radius ?? 300) * 1.5
-	const H     = opts.radius ?? 300
-	const amp   = H * 0.12
-	const omega = 1.5
-	const speed = 2.5
-	const fs    = opts.fontSize ?? 14
-	const adv   = fs * (opts.charAdvanceRatio ?? 0.62)
-
-	const { chars, us } = flagRow(text, 0, W, adv, opts.charWidthMap)
-	return chars.map((char, i) =>
-		flagCharAt(char, us[i], 0.5, t, W, H, amp, omega, speed),
-	)
+/** One justified row along the middle of the flag (flow). */
+function flagFlow(L: Layout, t: number): CharPosition[] {
+	const p = flagParams(L)
+	const { chars, offsets } = run(L, 0, p.W, { closed: false, justify: true })
+	return chars.map((char, k) => flagCharAt(char, offsets[k] / p.W, 0.5, t, p))
 }
 
 // ─── Animation helpers ────────────────────────────────────────────────────────
@@ -563,58 +428,47 @@ export function isAnimatedShape(shape: WrapTypeShape | undefined): boolean {
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 /**
- * Compute the full list of character positions and orientations for the given
- * shape + fill combination at an optional animation time `t` (seconds).
- *
- * When `opts.repeat` is false the geometry still determines where positions
- * land, but the result is sliced to `text.length` so each character appears
- * exactly once without tiling.
+ * Compute the list of character positions and orientations for the given shape + fill at animation time
+ * `t` (seconds). Characters advance by their measured widths when `charWidthMap` is given (createWrapScene
+ * and the React components measure them for you), else by fontSize × charAdvanceRatio. Each frame reads
+ * correctly from outside the surface. With `repeat: false` each character appears once.
  */
 export function getCharPositionsAt(opts: WrapTypeOptions, t: number): CharPosition[] {
 	const shape = opts.shape ?? 'sphere'
-	const fill  = opts.fill  ?? 'cover'
-	// Warn when text is empty so consumers know the 'Type' fallback is active
-	if (!opts.text) console.warn('[wrapType] opts.text is empty — falling back to "Type".')
-	const text  = opts.text  || 'Type'
+	const fill = opts.fill ?? 'cover'
+	const L = layoutFor(opts, shape === 'stool' ? 200 : 300)
+	const time = Number.isFinite(t) ? t : 0
+
+	if (fill === 'pattern') warnOnce('[wrapType] fill:"pattern" is not yet implemented — falling back to "cover".')
+	if (opts.mode === 'silhouette') warnOnce('[wrapType] mode:"silhouette" is not yet implemented — falling back to "surface".')
+	if ((fill === 'full-width' || fill === 'full-height') && shape !== 'sphere') {
+		warnOnce(`[wrapType] fill:"${fill}" is only available on the sphere — using "cover" on ${shape}.`)
+	}
 
 	let positions: CharPosition[]
-
-	// Warn on unimplemented fill/mode values so consumers are not silently misled
-	if (fill === 'pattern') {
-		console.warn('[wrapType] fill:"pattern" is not yet implemented — falling back to "cover".')
-	}
-	if (opts.mode === 'silhouette') {
-		console.warn('[wrapType] mode:"silhouette" is not yet implemented — falling back to "surface".')
-	}
-
 	if (shape === 'sphere') {
-		if (fill === 'flow')        positions = sphereFlow(text, opts)
-		else if (fill === 'full-width')  positions = sphereFullWidth(text, opts)
-		else if (fill === 'full-height') positions = sphereFullHeight(text, opts)
-		else                             positions = sphereCover(text, opts)
+		if (fill === 'flow') positions = sphereFlow(L)
+		else if (fill === 'full-width') positions = sphereFullWidth(L)
+		else if (fill === 'full-height') positions = sphereFullHeight(L)
+		else positions = sphereCover(L)
 	} else if (shape === 'cylinder') {
-		positions = fill === 'flow' ? cylinderFlow(text, opts) : cylinderCover(text, opts)
+		positions = fill === 'flow' ? cylinderFlow(L) : cylinderCover(L)
 	} else if (shape === 'torus') {
-		positions = fill === 'flow' ? torusFlow(text, opts) : torusCover(text, opts)
+		positions = fill === 'flow' ? torusFlow(L) : torusCover(L)
 	} else if (shape === 'plane') {
-		positions = planeCover(text, opts)
+		positions = planeCover(L)
 	} else if (shape === 'stool') {
-		positions = fill === 'flow' ? stoolFlow(text, opts) : stoolCover(text, opts)
+		positions = fill === 'flow' ? stoolFlow(L) : stoolCover(L)
 	} else if (shape === 'flag') {
-		positions = fill === 'flow' ? flagFlow(text, opts, t) : flagCover(text, opts, t)
+		positions = fill === 'flow' ? flagFlow(L, time) : flagCover(L, time)
 	} else {
-		positions = sphereCover(text, opts)
+		positions = sphereCover(L)
 	}
 
-	// No-repeat: place text exactly once, sliced to text.length characters,
-	// with each character taken directly from the string (no modulo cycling).
-	if (opts.repeat === false) {
-		positions = positions.slice(0, text.length).map((cp, i) => ({
-			...cp,
-			char: text[i],
-		}))
+	if (positions.length >= MAX_POSITIONS) {
+		warnOnce(`[wrapType] the layout needs more than ${MAX_POSITIONS} characters; the rest were left out (use a larger fontSize or a smaller radius)`)
+		positions = positions.slice(0, MAX_POSITIONS)
 	}
-
 	return positions
 }
 
