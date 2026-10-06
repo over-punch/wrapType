@@ -1,6 +1,6 @@
 // wrapType/src/react/WrapTypeMesh.tsx — R3F component: SDF text on 3D surface via troika-three-text
 
-import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createSDFText, updateSDFText } from '../core/sdf'
@@ -64,7 +64,18 @@ export const WrapTypeMesh = forwardRef<THREE.Group, WrapTypeMeshProps>(
 		forwardedRef,
 	) => {
 		const { scene } = useThree()
-		const groupRef = useRef<THREE.Group | null>(null)
+		// One group for the component's lifetime, so the forwarded ref is set from the first render.
+		const group = useMemo(() => new THREE.Group(), [])
+		const groupRef = useRef<THREE.Group | null>(group)
+		const safeRadius = Number.isFinite(radius) && radius > 0 ? radius : 1.0
+		// Reduced motion stops auto-rotation (read live).
+		const reducedRef = useRef(typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
+		useEffect(() => {
+			const mq = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : undefined
+			const onChange = () => { reducedRef.current = !!mq?.matches }
+			mq?.addEventListener?.('change', onChange)
+			return () => mq?.removeEventListener?.('change', onChange)
+		}, [])
 
 		// Build a stable options object for the core factory
 		const options: WrapTypeMeshOptions = {
@@ -80,23 +91,22 @@ export const WrapTypeMesh = forwardRef<THREE.Group, WrapTypeMeshProps>(
 		}
 
 		// Serialise options so we can detect changes without deep equality
-		const optionsKey = JSON.stringify({ shape, radius, ...options })
+		const optionsKey = JSON.stringify({ shape, radius: safeRadius, ...options })
 		const prevKeyRef = useRef<string>('')
 		const initializedRef = useRef(false)
 
 		// Expose the group via forwardRef — only when mounted (null during unmount)
-		useImperativeHandle(forwardedRef, () => groupRef.current as THREE.Group, [])
+		useImperativeHandle(forwardedRef, () => group, [group])
 
 		// Create the group on mount; add it to the scene imperatively
 		useEffect(() => {
-			const group = new THREE.Group()
 			group.position.set(...position)
 			group.rotation.set(...rotation)
 			group.scale.set(...scale)
 			groupRef.current = group
 			scene.add(group)
 
-			const { group: built } = createSDFText(shape, options, radius)
+			const { group: built } = createSDFText(shape, options, safeRadius)
 			built.children.slice().forEach((child) => {
 				built.remove(child)
 				group.add(child)
@@ -105,10 +115,13 @@ export const WrapTypeMesh = forwardRef<THREE.Group, WrapTypeMeshProps>(
 			prevKeyRef.current = optionsKey
 
 			return () => {
-				// Dispose troika Text children and remove group from scene
-				updateSDFText(group, shape, { text: '' }, 0)
+				// Dispose the troika Text children (GPU resources) and remove the group from the scene.
+				group.children.slice().forEach((child) => {
+					;(child as unknown as { dispose?: () => void }).dispose?.()
+					group.remove(child)
+				})
 				scene.remove(group)
-				groupRef.current = null
+				initializedRef.current = false
 			}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		}, [scene])
@@ -118,7 +131,7 @@ export const WrapTypeMesh = forwardRef<THREE.Group, WrapTypeMeshProps>(
 			const group = groupRef.current
 			if (!group || !initializedRef.current) return
 			if (optionsKey === prevKeyRef.current) return
-			updateSDFText(group, shape, options, radius)
+			updateSDFText(group, shape, options, safeRadius)
 			prevKeyRef.current = optionsKey
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		}, [optionsKey])
@@ -147,7 +160,7 @@ export const WrapTypeMesh = forwardRef<THREE.Group, WrapTypeMeshProps>(
 
 		// Auto-rotate animation
 		useFrame((_state, delta) => {
-			if (!autoRotate || !groupRef.current) return
+			if (!autoRotate || !groupRef.current || reducedRef.current) return
 			groupRef.current.rotation.y += autoRotateSpeed * delta
 		})
 
