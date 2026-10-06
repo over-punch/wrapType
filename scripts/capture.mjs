@@ -3,21 +3,28 @@
 // captures one static PNG per built-in shape plus an animated hero GIF of the
 // rotating sphere, and writes everything to assets/.
 //
-// Reproducible: start the demo, then run this script.
-//   1. cd site && PORT=3116 npm run dev        (in one terminal)
-//   2. node scripts/capture.mjs                (in another)
+// Reproducible: build and serve the demo locally (never the live site), then run this script.
+//   1. npm run build && cd site && npx next build && npx next start -p 5961   (in one terminal)
+//   2. npm run capture                                                      (in another)
+// Override the URL with WRAPTYPE_URL.
 //
 // Setup once: npx playwright install chromium ; brew install ffmpeg
+// Example: PLAYWRIGHT_FROM=../axisRhythm/package.json npm run capture
 //
 // All images render the real DOM renderer — every character is an HTML <span>
 // placed in 3D by CSS3DRenderer, exactly what the package ships.
 
-import { chromium } from "playwright"
+import { createRequire } from "node:module"
+
+// Playwright is not a dependency of this package. Install it anywhere and point PLAYWRIGHT_FROM at a
+// package.json whose node_modules contains it (e.g. a sibling type-tools submodule); otherwise "playwright" is resolved from here.
+const requireFrom = createRequire(process.env.PLAYWRIGHT_FROM ?? import.meta.url)
+const { chromium } = requireFrom("playwright")
 import { mkdir, rm, readdir } from "node:fs/promises"
 import { execFileSync } from "node:child_process"
 import { join } from "node:path"
 
-const BASE = process.env.WRAPTYPE_URL ?? "http://localhost:3116/"
+const BASE = process.env.WRAPTYPE_URL ?? "http://localhost:5961/"
 const ASSETS = join(process.cwd(), "assets")
 const TMP = join(process.cwd(), ".capture-frames")
 
@@ -26,9 +33,10 @@ const TMP = join(process.cwd(), ".capture-frames")
 const SCENES = [
 	{ shape: "Sphere",   text: "TYPOGRAPHY", file: "shape-sphere.png",   settle: 900 },
 	{ shape: "Cylinder", text: "WRAPTYPE",   file: "shape-cylinder.png", settle: 900 },
+	{ shape: "Flag",     text: "FLAG",       file: "shape-flag.png",     settle: 1500 },
 ]
 
-// The 3D scene element inside the demo (role="img", labelled for a11y).
+// The 3D scene element inside the demo (role="group", labelled for a11y).
 const SCENE_SELECTOR = '[aria-label*="3D typography"]'
 
 /** Type a new string into the demo's "Text to wrap" textarea. */
@@ -42,6 +50,8 @@ async function setText(page, text) {
 /** Click a shape pill by its visible label. */
 async function setShape(page, label) {
 	await page.getByRole("button", { name: label, exact: true }).first().click()
+	// Move the pointer off the controls so no button tooltip appears in the shot.
+	await page.mouse.move(2, 2)
 	await page.waitForTimeout(700)
 }
 
@@ -59,10 +69,10 @@ async function main() {
 	await page.evaluate(() => document.fonts.ready)
 	await page.waitForTimeout(1200) // let WebGL/CSS3D warm up + variable fonts paint
 
-	// Capture-only: hide the "Drop or click" mesh-upload affordance so it does
-	// not intrude on the clean scene shots.
+	// Capture-only: hide the "Drop or click" mesh-upload affordance and the sticky
+	// site header so neither intrudes on the clean scene shots.
 	await page.addStyleTag({
-		content: `label[for="mesh-file-input"] { opacity: 0 !important; }`,
+		content: `label[for="mesh-file-input"] { opacity: 0 !important; } header { visibility: hidden !important; }`,
 	})
 
 	const scene = page.locator(SCENE_SELECTOR).first()
