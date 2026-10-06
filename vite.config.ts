@@ -12,6 +12,8 @@ export default defineConfig({
 		lib: {
 			entry: {
 				index: 'src/index.ts',
+				core:  'src/core.ts',
+				sdf:   'src/sdf.ts',
 				r3f:   'src/r3f.ts',
 			},
 			formats: ['es', 'cjs'],

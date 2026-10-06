@@ -13,9 +13,9 @@ export type {
 export { WRAP_TYPE_CLASS } from './core/types'
 
 // Core functions
-export { getCharPositions, getCharPositionsAt, isAnimatedShape } from './core/geometry'
+export { getCharPositions, getCharPositionsAt, isAnimatedShape, splitGraphemes, MAX_POSITIONS } from './core/geometry'
 export { getCharPositionsFromMesh } from './core/mesh'
-export { createWrapScene }  from './core/scene'
+export { createWrapScene, measureCharWidths } from './core/scene'
 export type { SceneHandle } from './core/scene'
 
 // React

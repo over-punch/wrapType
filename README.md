@@ -34,7 +34,7 @@ npm install @overpunch/wraptype three react react-dom
 npm install @overpunch/wraptype three @react-three/fiber troika-three-text
 ```
 
-Vanilla JS users need only `three`.
+Vanilla JS users need only `three`: import from `@overpunch/wraptype/core` (the main entry also exports the React components, so it imports `react`). The React-free SDF factory is at `@overpunch/wraptype/sdf` (`three` + `troika-three-text`).
 
 ## React
 
@@ -61,7 +61,7 @@ import { WrapTypeScene } from '@overpunch/wraptype'
   <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-cylinder.png?v=1" alt="The word WRAPTYPE arced around the curved side of a cylinder" width="380">
 </p>
 
-<p align="center"><em>Every glyph above is a live <code>&lt;span&gt;</code> placed in 3D by CSS3DRenderer — selectable, styleable, animatable.</em></p>
+<p align="center"><em>Every glyph above is a live <code>&lt;span&gt;</code> placed in 3D by CSS3DRenderer — styleable and animatable. Screen readers get the text once (the 3D characters are hidden from them).</em></p>
 
 ### Hook
 
@@ -80,17 +80,16 @@ const { ref } = useWrapType({
 ## Vanilla JS
 
 ```ts
-import { getCharPositions, createWrapScene } from '@overpunch/wraptype'
+import { getCharPositions, createWrapScene } from '@overpunch/wraptype/core'
 
 const container = document.getElementById('scene')
 
-const positions = getCharPositions({
+// Pass null as the positions: the scene measures each character's width (proportional spacing) and lays
+// the text out itself.
+const scene = createWrapScene(container, null, {
   text: 'Typography is the art and technique of arranging type',
   shape: 'torus',
   fill: 'cover',
-})
-
-const scene = createWrapScene(container, positions, {
   autoRotate: true,
   autoRotateSpeed: 0.6,
 })
@@ -98,7 +97,7 @@ const scene = createWrapScene(container, positions, {
 // Later, to clean up:
 scene.destroy()
 
-// Rebuild after changing options:
+// Your own positions (e.g. from getCharPositions with a charWidthMap, or getCharPositionsFromMesh):
 const newPositions = getCharPositions({ text: 'New text', shape: 'sphere' })
 scene.rebuild(newPositions)
 ```
@@ -127,12 +126,12 @@ import { WrapTypeMesh } from '@overpunch/wraptype/r3f'
 </Canvas>
 ```
 
-`WrapTypeMesh` accepts `shape` (`'sphere' | 'cylinder' | 'torus' | 'plane'`), `radius`, `text`, `font`, `fontSize`, `letterSpacing`, `maxWidth`, `textAlign`, `color`, `curvatureTracking`, `curvatureTrackingFactor`, plus standard transform props (`position`, `rotation`, `scale`, `autoRotate`, `autoRotateSpeed`).
+`WrapTypeMesh` accepts `shape` (`'sphere' | 'cylinder' | 'torus' | 'plane'`; troika curves text around a vertical axis only, so `sphere` and `torus` render as a band of words around the equator, and `flag` and `stool` fall back to `plane`), `radius`, `text`, `font`, `fontSize`, `letterSpacing`, `maxWidth`, `textAlign`, `color`, `curvatureTracking`, `curvatureTrackingFactor`, plus standard transform props (`position`, `rotation`, `scale`, `autoRotate`, `autoRotateSpeed`).
 
 ### Imperative (no React)
 
 ```ts
-import { createSDFText, updateSDFText } from '@overpunch/wraptype/r3f'
+import { createSDFText, updateSDFText } from '@overpunch/wraptype/sdf'
 
 const { group, dispose } = createSDFText('cylinder', {
   text: 'Typography on any surface',
@@ -162,8 +161,8 @@ dispose()
 |---|---|---|---|
 | `text` | `string` | — | Text to distribute across the surface. Repeats to fill. |
 | `shape` | `'sphere' \| 'cylinder' \| 'torus' \| 'plane' \| 'stool' \| 'flag'` | `'sphere'` | Built-in 3D geometry to wrap text onto. |
-| `mode` | `'surface' \| 'silhouette'` | `'surface'` | Surface mode places characters on the geometry; silhouette places them along the outline contour. |
-| `fill` | `'cover' \| 'flow' \| 'full-width' \| 'full-height' \| 'pattern'` | `'cover'` | How to distribute characters across the surface. |
+| `mode` | `'surface'` | `'surface'` | Places characters on the geometry. (`'silhouette'` is reserved and not implemented yet; it falls back to `'surface'` with a warning.) |
+| `fill` | `'cover' \| 'flow' \| 'full-width' \| 'full-height'` | `'cover'` | How to distribute characters across the surface. (`'pattern'` is reserved; it falls back to `'cover'`.) |
 | `fontSize` | `number` | `14` | Character font size in px. |
 | `fontFamily` | `string` | `undefined` | CSS font-family override applied to each character span. |
 | `fontWeight` | `string \| number` | `'normal'` | CSS font-weight applied to each character span. |
@@ -173,20 +172,25 @@ dispose()
 | `autoRotate` | `boolean` | `false` | Continuously rotate the scene. |
 | `autoRotateSpeed` | `number` | `1.0` | Rotation speed multiplier. |
 | `camera` | `'orbit' \| 'fixed'` | `'orbit'` | `'orbit'` — drag to rotate, scroll to zoom. `'fixed'` — static camera. |
+| `zoom` | `boolean` | `true` | Wheel / pinch zoom on the orbit camera. Set `false` so the mouse wheel scrolls the page over the scene. |
+| `showBackfaces` | `boolean` | `false` | Show characters on the far side, seen through the surface (mirrored). Hidden by default. |
 | `cameraPosition` | `[number, number, number]` | `[0, 0, 700]` | Initial camera position in scene units. |
-| `charAdvanceRatio` | `number` | `0.62` | Fraction of fontSize used as character advance width. |
+| `charAdvanceRatio` | `number` | `0.62` | Fraction of fontSize used as a character's advance when it has no measured width (`charWidthMap`; the scene and the React components measure widths for you). |
+| `charWidthMap` | `Map<string, number>` | measured | Advance width per character, in px (see `measureCharWidths`). |
 | `lineHeightRatio` | `number` | `1.4` | Line height multiplier relative to fontSize. |
-| `repeat` | `boolean` | `true` | When false, text is placed exactly once without tiling. |
+| `repeat` | `boolean` | `true` | When false, text is placed exactly once without tiling; text that doesn't fit is left out with a warning. |
 | `characterCurve` | `number` | `0` | Bend characters to follow surface curvature. `0` = flat, `1` = full bend. |
 | `style` | `CSSProperties` | — | Applied to the container div. (React only) |
 
 ### Fill modes
 
-- **`cover`** — tiles the full surface, latitude bands scaled by circumference
-- **`flow`** — a single band around the equator / circumference, text repeats
-- **`full-width`** — one horizontal pass at the widest point of the shape
-- **`full-height`** — one vertical pass from pole to pole
-- **`pattern`** — repeating tiled pattern with configurable gap
+- **`cover`** — tiles the full surface in rows (latitude bands on the sphere); the text continues from row to row
+- **`flow`** — a single band around the equator / circumference; the text repeats to fill it (with `repeat: false`, text longer than the band is cut)
+- **`full-width`** — *(sphere)* the text once around the equator, scaled to fit it exactly
+- **`full-height`** — *(sphere)* one character per line down the meridian facing the camera
+- Rows and rings are justified, so the text meets itself without a seam or overlap. On other shapes, `full-width` and `full-height` use `cover`.
+
+Every character faces outward and reads left to right from outside the surface. Text is laid out by grapheme, so emoji sequences and accented letters stay whole; right-to-left scripts are laid out in logical order (left to right).
 
 ### `SceneHandle`
 
@@ -195,7 +199,13 @@ Returned by `createWrapScene()`:
 | Method | Description |
 |---|---|
 | `destroy()` | Removes the renderer and all event listeners. |
-| `rebuild(positions)` | Replaces all character elements without rebuilding the renderer. |
+| `rebuild(positions)` | Replaces all character elements without rebuilding the renderer (custom positions also stop the flag's own animation). |
+
+The render loop runs only while something moves (dragging, damping, auto-rotation, the flag's wave) and while the scene is on screen. `prefers-reduced-motion` stops auto-rotation and the flag's wave, including when the setting changes while the scene runs. Sizes are validated: zero, negative and non-numeric `fontSize`, `radius` and ratios fall back to their defaults, and a layout is capped at 20,000 characters (with a warning).
+
+### Accessibility
+
+The 3D characters repeat the text, one letter per element, so they are hidden from screen readers (`aria-hidden`), and the text is exposed once in a visually hidden element inside the container: screen readers read it, and find-in-page finds it. Give `WrapTypeScene` an `aria-label` or `role="img"` if the scene needs a description; HTML attributes are forwarded to the container. The glyphs themselves are not selectable.
 
 ### `getCharPositions(opts)`
 
@@ -275,11 +285,11 @@ new GLTFLoader().load('/model.glb', (gltf) => {
 
 ## Performance notes
 
-The DOM renderer creates **one HTML element per character instance**, so cost scales with the number of placed glyphs (which `fill`, `repeat`, and surface area all affect). It is built for striking display typography — wrap a headline, a logo, a hero — not for paragraphs of thousands of characters. For very high glyph counts, or to embed text inside a lit/shaded WebGL scene, use the [SDF renderer](#gpu--webgl-renderer-r3f) instead.
+The DOM renderer creates **one HTML element per character instance**, so cost scales with the number of placed glyphs (which `fill`, `repeat`, and surface area all affect). It is built for striking display typography — wrap a headline, a logo, a hero — not for paragraphs of thousands of characters. In headless Chrome (software rendering), an auto-rotating sphere of about 2,000 characters ran at a ~45 ms median frame and the default sphere (about 6,000) at ~150 ms; real GPUs are much faster. A static scene does no work between interactions. For very high glyph counts, or to embed text inside a lit/shaded WebGL scene, use the [SDF renderer](#gpu--webgl-renderer-r3f) instead.
 
 ## How it compares
 
-- **drei `<Text3D>` / extruded geometry** — renders solid 3D letterforms in WebGL. wrapType's DOM mode instead keeps glyphs as flat, real HTML on the surface, so they stay selectable, accessible, and styleable with CSS.
+- **drei `<Text3D>` / extruded geometry** — renders solid 3D letterforms in WebGL. wrapType's DOM mode instead keeps glyphs as flat, real HTML on the surface, styleable with CSS, with the text exposed once to screen readers.
 - **Plain `troika-three-text`** — gives you GPU SDF text but not surface distribution. wrapType's `/r3f` renderer wraps troika with shape geometry and curvature; its DOM renderer needs no WebGL text at all.
 - **CSS-only 3D transforms** — can fake perspective on a block of text, but cannot distribute individual characters analytically across a curved surface with correct per-glyph normals. That is wrapType's core.
 

@@ -12,6 +12,16 @@
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
 		},
+		"./core": {
+			"types": "./dist/core.d.ts",
+			"import": "./dist/core.js",
+			"require": "./dist/core.cjs"
+		},
+		"./sdf": {
+			"types": "./dist/sdf.d.ts",
+			"import": "./dist/sdf.js",
+			"require": "./dist/sdf.cjs"
+		},
 		"./r3f": {
 			"types": "./dist/r3f.d.ts",
 			"import": "./dist/r3f.js",
