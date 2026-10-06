@@ -150,6 +150,7 @@ export function createSDFText(
 	radius = 1.0,
 ): { group: THREE.Group; dispose: () => void } {
 	const opts = resolve(options)
+	if (!(Number.isFinite(radius) && radius > 0)) radius = 1.0
 	const words = opts.text.trim().split(/\s+/).filter(Boolean)
 	const display = opts.text.trim()
 

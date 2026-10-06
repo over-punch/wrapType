@@ -215,10 +215,12 @@ describe('WrapTypeScene', () => {
 		expect(div?.className).toBe('my-scene')
 	})
 
-	it('applies aria-hidden="true" to the container div', () => {
-		const { container } = render(<WrapTypeScene text="Typography" />)
+	it('keeps the container readable and forwards HTML attributes (the 3D layer is hidden instead)', () => {
+		const { container } = render(<WrapTypeScene text="Typography" id="globe" aria-label="Spinning globe of text" />)
 		const div = container.querySelector('div')
-		expect(div?.getAttribute('aria-hidden')).toBe('true')
+		expect(div?.getAttribute('aria-hidden')).toBeNull()
+		expect(div?.id).toBe('globe')
+		expect(div?.getAttribute('aria-label')).toBe('Spinning globe of text')
 	})
 
 	it('forwards style to the container div', () => {
@@ -267,5 +269,34 @@ describe('WrapTypeScene', () => {
 		expect(() =>
 			render(<WrapTypeScene text="Typography" camera="fixed" />)
 		).not.toThrow()
+	})
+})
+
+// ─── Review fixes (2026-10) ──────────────────────────────────────────────────
+
+describe('createWrapScene review fixes', () => {
+	it('exposes the text once to screen readers and hides the 3D characters', async () => {
+		const { createWrapScene } = await import('../core/scene')
+		const c = document.createElement('div')
+		document.body.appendChild(c)
+		const h = createWrapScene(c, null, { text: 'Hello world', shape: 'plane', camera: 'fixed' })
+		const hidden = c.querySelector('[aria-hidden="true"]')
+		expect(hidden).not.toBeNull()
+		const readable = Array.from(c.childNodes).filter((n) => n instanceof HTMLElement && !n.hasAttribute('aria-hidden'))
+		expect(readable.map((n) => n.textContent)).toEqual(['Hello world'])
+		h.destroy()
+		expect(c.childNodes.length).toBe(0)
+	})
+
+	it("doesn't let a colour or font string add other styles", async () => {
+		const { createWrapScene } = await import('../core/scene')
+		const c = document.createElement('div')
+		document.body.appendChild(c)
+		const h = createWrapScene(c, null, { text: 'ab', shape: 'plane', camera: 'fixed', color: 'red;background:url(/beacon)', fontFamily: 'x;position:fixed' })
+		c.querySelectorAll<HTMLElement>('[aria-hidden="true"] span').forEach((s) => {
+			expect(s.style.background).toBe('')
+			expect(s.style.position).not.toBe('fixed')
+		})
+		h.destroy()
 	})
 })
