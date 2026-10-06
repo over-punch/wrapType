@@ -1,7 +1,7 @@
 {
 	"name": "@overpunch/wraptype",
 	"version": "1.1.0",
-	"description": "Live DOM text wrapping any 3D surface — surface and silhouette modes, orbit camera, built-in shapes plus custom mesh positions",
+	"description": "Live DOM text wrapping any 3D surface — built-in shapes, custom meshes, orbit camera, and an optional WebGL/SDF renderer",
 	"type": "module",
 	"main": "dist/index.cjs",
 	"module": "dist/index.js",

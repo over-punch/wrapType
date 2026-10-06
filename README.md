@@ -7,7 +7,7 @@ Real DOM text on any 3D surface — sphere, cylinder, torus, plane, waving flag,
 wrapType uses Three.js's CSS3DRenderer to distribute HTML text elements across the geometry of a 3D surface. Each character is a real DOM element oriented along the surface normal, which means variable fonts, CSS animations, hover states, and every other Liiift tool compose naturally — no canvas, no textures.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/hero.gif?v=1" alt="The word TYPOGRAPHY rendered as real HTML spans wrapped around a slowly rotating 3D sphere" width="640">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/hero.gif?v=2" alt="The word TYPOGRAPHY rendered as real HTML spans wrapped around a slowly rotating 3D sphere" width="640">
 </p>
 
 > Try it live and drop in your own `.glb` / `.gltf` / `.obj` mesh at **[wraptype.com](https://wraptype.com)**.
@@ -57,24 +57,44 @@ import { WrapTypeScene } from '@overpunch/wraptype'
 ```
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-sphere.png?v=1" alt="The word TYPOGRAPHY wrapped around a sphere in latitude bands" width="380">
-  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-cylinder.png?v=1" alt="The word WRAPTYPE arced around the curved side of a cylinder" width="380">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-sphere.png?v=2" alt="The word TYPOGRAPHY wrapped around a sphere in four latitude bands, every band reading left to right" width="380">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-cylinder.png?v=2" alt="The word WRAPTYPE repeated in five rows around the curved side of a cylinder" width="380">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/over-punch/wrapType/main/assets/shape-flag.png?v=2" alt="The word FLAG repeated in two rows on a waving flag surface, the letters tilting with the wave" width="380">
 </p>
 
-<p align="center"><em>Every glyph above is a live <code>&lt;span&gt;</code> placed in 3D by CSS3DRenderer — styleable and animatable. Screen readers get the text once (the 3D characters are hidden from them).</em></p>
+<p align="center"><em>Every glyph above is a live <code>&lt;span&gt;</code> placed in 3D by CSS3DRenderer — styleable and animatable. Characters on the far side are hidden by default, so everything you see reads left to right. Screen readers get the text once (the 3D characters are hidden from them). Captured from a local build of the demo with <code>npm run capture</code>.</em></p>
 
 ### Hook
 
 ```tsx
+'use client'
+
 import { useWrapType } from '@overpunch/wraptype'
 
-const { ref } = useWrapType({
-  text: 'Typography is the art and technique of arranging type',
-  shape: 'cylinder',
-  fill: 'flow',
-})
+export function Ring() {
+  const { ref } = useWrapType({
+    text: 'Typography is the art and technique of arranging type',
+    shape: 'cylinder',
+    fill: 'flow',
+  })
+  // The container needs a size: the scene fills it.
+  return <div ref={ref} style={{ width: '100%', height: '500px' }} />
+}
+```
 
-<div ref={ref} style={{ width: '100%', height: '500px' }} />
+### Next.js App Router
+
+The React components are browser-only, and the published bundle does not carry a `'use client'` directive, so import them from a file marked `'use client'` (as above) and render that from your Server Component page:
+
+```tsx
+// app/page.tsx (a Server Component)
+import { Ring } from './Ring' // the 'use client' file above
+
+export default function Page() {
+  return <Ring />
+}
 ```
 
 ## Vanilla JS
@@ -82,6 +102,7 @@ const { ref } = useWrapType({
 ```ts
 import { getCharPositions, createWrapScene } from '@overpunch/wraptype/core'
 
+// The container needs a size (e.g. width: 100%; height: 500px): the scene fills it.
 const container = document.getElementById('scene')
 
 // Pass null as the positions: the scene measures each character's width (proportional spacing) and lays
@@ -180,6 +201,7 @@ dispose()
 | `lineHeightRatio` | `number` | `1.4` | Line height multiplier relative to fontSize. |
 | `repeat` | `boolean` | `true` | When false, text is placed exactly once without tiling; text that doesn't fit is left out with a warning. |
 | `characterCurve` | `number` | `0` | Bend characters to follow surface curvature. `0` = flat, `1` = full bend. |
+| `positions` | `CharPosition[]` | — | Pre-computed positions (e.g. from `getCharPositionsFromMesh`); when given, they replace the built-in shape layout. (React only; in vanilla JS pass them to `createWrapScene`.) |
 | `style` | `CSSProperties` | — | Applied to the container div. (React only) |
 
 ### Fill modes
@@ -243,7 +265,7 @@ OrbitControls are wired to a transparent overlay `<div>` so that pointer events 
 |---|---|
 | Sphere | Latitude bands from φ = 0.12π to 0.88π. Band character count scales with `sin(φ)`. |
 | Cylinder | Characters arc around the circumference, stacked in rows. |
-| Torus | Characters follow the outer ring parameterised by major and minor angle. |
+| Torus | `flow`: characters follow the outer ring. `cover`: rings of text over the whole tube, parameterised by major and minor angle; seen from the front, the inside of the tube reads upside down. |
 | Plane | Grid of characters on a flat surface facing the camera. |
 | Stool | Cylinder with disc caps — top, side, and bottom surfaces sampled separately. |
 | Flag | Animated surface — characters follow a sinusoidal wave that propagates along the flag. |
@@ -256,12 +278,12 @@ In code, load any Three.js `Mesh` and feed it to `getCharPositionsFromMesh`, the
 
 ```ts
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { Mesh } from 'three'
-import { getCharPositionsFromMesh, createWrapScene } from '@overpunch/wraptype'
+import type { Mesh } from 'three'
+import { getCharPositionsFromMesh, createWrapScene } from '@overpunch/wraptype/core'
 
 new GLTFLoader().load('/model.glb', (gltf) => {
-  let mesh = null
-  gltf.scene.traverse((c) => { if (!mesh && c instanceof Mesh) mesh = c })
+  // The first mesh in the file (merge multi-part models into one mesh before exporting).
+  const mesh = gltf.scene.getObjectByProperty('isMesh', true) as Mesh | undefined
   if (!mesh) return
 
   const positions = getCharPositionsFromMesh(
@@ -270,7 +292,8 @@ new GLTFLoader().load('/model.glb', (gltf) => {
     { radius: 300 },
     250, // sample count
   )
-  createWrapScene(document.getElementById('scene'), positions, { autoRotate: true })
+  // text is required by the options type; with custom positions, the scene uses it for screen readers.
+  createWrapScene(document.getElementById('scene')!, positions, { text: 'Typography on any surface', autoRotate: true })
 })
 ```
 
@@ -305,10 +328,10 @@ npm run typecheck
 npm run build   # vite library build → dist/ (ESM + CJS + types)
 ```
 
-The package source lives in `src/` (`core/` is framework-agnostic; `react/` holds the hook + component; `r3f/` is the SDF renderer). The landing page and interactive demo are a separate Next.js app in `site/`. README visuals are regenerated reproducibly with `npm run capture` (drives the running demo with Playwright; see `scripts/capture.mjs`).
+The package source lives in `src/` (`core/` is framework-agnostic; `react/` holds the hook + component; `r3f/` is the SDF renderer). The landing page and interactive demo are a separate Next.js app in `site/`. README visuals are regenerated reproducibly with `npm run capture`: it drives a local build of the demo (`cd site && npx next build && npx next start -p 5961`) with Playwright and needs `ffmpeg` for the GIF; see `scripts/capture.mjs`.
 
 ## License
 
-MIT © [Liiift Studio](https://overpunch.ca)
+MIT © [Overpunch](https://overpunch.ca) (see [LICENSE](LICENSE))
 
 Part of [type-tools](https://github.com/over-punch/type-tools) — a suite of typographic tools for techniques that are impossible or impractical in CSS alone.
