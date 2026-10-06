@@ -140,11 +140,10 @@ const SDF_SHAPES: { value: WrapTypeShape; label: string; title: string }[] = [
 ]
 
 const FILLS: { value: WrapTypeFill; label: string; title: string }[] = [
-	{ value: "cover",       label: "Cover",       title: "Scale text to cover the full surface area of the mesh" },
-	{ value: "flow",        label: "Flow",        title: "Let text flow naturally across the surface at its current size" },
-	{ value: "full-width",  label: "Full Width",  title: "Stretch text to fill the full width of the mesh" },
-	{ value: "full-height", label: "Full Height", title: "Stretch text to fill the full height of the mesh" },
-	{ value: "pattern",     label: "Pattern",     title: "Tile text as a repeating grid across the surface" },
+	{ value: "cover",       label: "Cover",       title: "Tile the text in rows over the whole surface" },
+	{ value: "flow",        label: "Flow",        title: "Run the text in one band around the equator or circumference" },
+	{ value: "full-width",  label: "Full Width",  title: "Sphere: set the text once around the equator, scaled to fit (other shapes use Cover)" },
+	{ value: "full-height", label: "Full Height", title: "Sphere: one character per line down the meridian facing you (other shapes use Cover)" },
 ]
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -362,9 +361,10 @@ export default function Demo() {
 						onDragLeave={handleDragLeave}
 						onDrop={handleDrop}
 					>
+						{/* role="group", not "img": an img role would hide the text WrapTypeScene exposes to screen readers. */}
 						<div
-							aria-label="3D typography visualisation — drag to orbit, scroll to zoom"
-							role="img"
+							aria-label="3D typography demo — drag to orbit, scroll to zoom"
+							role="group"
 							className="w-full h-full"
 						>
 							<WrapTypeScene
@@ -570,7 +570,9 @@ export default function Demo() {
 					<p className="text-xs text-muted italic mt-2" style={{ lineHeight: "1.8" }}>
 						Drag to orbit. Scroll to zoom. Characters are measured with canvas
 						measureText and justified to fill each row exactly — no fixed tracking.
-						The flag animates each frame with no DOM writes.
+						Characters on the far side are hidden, so everything you see reads left
+						to right. The flag moves the existing elements each frame without
+						rebuilding them.
 					</p>
 				</div>
 			)}

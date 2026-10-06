@@ -59,13 +59,14 @@ export default function Home() {
 						</p>
 					</div>
 					<div className="flex flex-col gap-3">
-						<p className="font-semibold text-foreground text-base">Five fill modes</p>
+						<p className="font-semibold text-foreground text-base">Four fill modes</p>
 						<p>
 							<strong>Cover</strong> tiles the entire surface. <strong>Flow</strong>{" "}
 							runs a single band around the circumference or equator.{" "}
-							<strong>Full-width</strong> fills the widest pass. <strong>Full-height</strong>{" "}
-							runs pole-to-pole. <strong>Pattern</strong> repeats text as a tileable
-							grid across the surface.
+							<strong>Full-width</strong> sets the text once around the sphere&rsquo;s
+							equator, scaled to fit. <strong>Full-height</strong> runs one character
+							per line down the meridian. Rows are justified, so the text meets itself
+							without a seam. Every glyph faces outward and reads left to right.
 						</p>
 					</div>
 					<div className="flex flex-col gap-3">
@@ -73,8 +74,8 @@ export default function Home() {
 						<p>
 							Because characters are real DOM, <code className="text-xs font-mono">font-variation-settings</code>,
 							CSS animations, hover states, and other Liiift tools all work
-							without any special integration. The renderer re-mounts the scene
-							when props change.
+							without any special integration. Screen readers and find-in-page get
+							the text once; the 3D letters are hidden from them.
 						</p>
 					</div>
 				</div>
@@ -171,15 +172,16 @@ const { ref } = useWrapType({
 
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">Vanilla JS</p>
-						<CodeBlock code={`import { getCharPositions, createWrapScene } from '@overpunch/wraptype'
+						<CodeBlock code={`import { createWrapScene } from '@overpunch/wraptype/core'
 
 const container = document.getElementById('scene')
-const positions = getCharPositions({
+// null positions: the scene measures each character and lays the text out itself
+const scene = createWrapScene(container, null, {
   text: 'Typography is the art and technique of arranging type',
   shape: 'torus',
   fill: 'cover',
+  autoRotate: true,
 })
-const scene = createWrapScene(container, positions, { autoRotate: true })
 
 // Later:
 scene.destroy()`} />
@@ -188,25 +190,26 @@ scene.destroy()`} />
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">Custom mesh (Vanilla JS)</p>
 						<CodeBlock code={`import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { Mesh } from 'three'
-import { getCharPositionsFromMesh, createWrapScene } from '@overpunch/wraptype'
+import type { Mesh } from 'three'
+import { getCharPositionsFromMesh, createWrapScene } from '@overpunch/wraptype/core'
 
 const loader = new GLTFLoader()
 loader.load('/model.glb', (gltf) => {
-  let mesh = null
-  gltf.scene.traverse((child) => {
-    if (!mesh && child instanceof Mesh) mesh = child
-  })
+  // The first mesh in the file (merge multi-part models before exporting)
+  const mesh = gltf.scene.getObjectByProperty('isMesh', true) as Mesh | undefined
   if (!mesh) return
 
-  const container = document.getElementById('scene')
+  const container = document.getElementById('scene')!
   const positions = getCharPositionsFromMesh(
     mesh,
     'Typography on any surface',
     { radius: 300 },
     250, // sample count
   )
-  const scene = createWrapScene(container, positions, { autoRotate: true })
+  const scene = createWrapScene(container, positions, {
+    text: 'Typography on any surface',
+    autoRotate: true,
+  })
 })`} />
 					</div>
 
@@ -223,8 +226,8 @@ loader.load('/model.glb', (gltf) => {
 							<tbody className="text-muted zebra">
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">text</td><td className="py-2 pr-6">—</td><td className="py-2">The string to distribute across the surface. Repeats to fill.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">shape</td><td className="py-2 pr-6">&apos;sphere&apos;</td><td className="py-2"><code className="font-mono">&apos;sphere&apos;</code> · <code className="font-mono">&apos;cylinder&apos;</code> · <code className="font-mono">&apos;torus&apos;</code> · <code className="font-mono">&apos;plane&apos;</code> · <code className="font-mono">&apos;stool&apos;</code> · <code className="font-mono">&apos;flag&apos;</code></td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">mode</td><td className="py-2 pr-6">&apos;surface&apos;</td><td className="py-2"><code className="font-mono">&apos;surface&apos;</code> — characters sit on the geometry · <code className="font-mono">&apos;silhouette&apos;</code> — characters follow the outline contour</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">fill</td><td className="py-2 pr-6">&apos;cover&apos;</td><td className="py-2"><code className="font-mono">&apos;cover&apos;</code> · <code className="font-mono">&apos;flow&apos;</code> · <code className="font-mono">&apos;full-width&apos;</code> · <code className="font-mono">&apos;full-height&apos;</code> · <code className="font-mono">&apos;pattern&apos;</code></td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">mode</td><td className="py-2 pr-6">&apos;surface&apos;</td><td className="py-2"><code className="font-mono">&apos;surface&apos;</code> — characters sit on the geometry. (<code className="font-mono">&apos;silhouette&apos;</code> is reserved and not implemented yet; it falls back to <code className="font-mono">&apos;surface&apos;</code> with a warning.)</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">fill</td><td className="py-2 pr-6">&apos;cover&apos;</td><td className="py-2"><code className="font-mono">&apos;cover&apos;</code> · <code className="font-mono">&apos;flow&apos;</code> · <code className="font-mono">&apos;full-width&apos;</code> · <code className="font-mono">&apos;full-height&apos;</code>. (<code className="font-mono">&apos;pattern&apos;</code> is reserved; it falls back to <code className="font-mono">&apos;cover&apos;</code>.)</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">fontSize</td><td className="py-2 pr-6">14</td><td className="py-2">Character font size in px.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">fontFamily</td><td className="py-2 pr-6">—</td><td className="py-2">CSS font-family override applied to each character span.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">fontWeight</td><td className="py-2 pr-6">&apos;normal&apos;</td><td className="py-2">CSS font-weight applied to each character span.</td></tr>
@@ -234,10 +237,13 @@ loader.load('/model.glb', (gltf) => {
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">autoRotate</td><td className="py-2 pr-6">false</td><td className="py-2">Continuously rotate the scene.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">autoRotateSpeed</td><td className="py-2 pr-6">1.0</td><td className="py-2">Rotation speed multiplier.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">camera</td><td className="py-2 pr-6">&apos;orbit&apos;</td><td className="py-2"><code className="font-mono">&apos;orbit&apos;</code> (drag to rotate, scroll to zoom) · <code className="font-mono">&apos;fixed&apos;</code></td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">zoom</td><td className="py-2 pr-6">true</td><td className="py-2">Wheel / pinch zoom on the orbit camera. Set false so the mouse wheel scrolls the page over the scene.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">showBackfaces</td><td className="py-2 pr-6">false</td><td className="py-2">Show characters on the far side, seen through the surface (mirrored). Hidden by default.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">cameraPosition</td><td className="py-2 pr-6">[0, 0, 700]</td><td className="py-2">Initial camera position [x, y, z] in scene units.</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">charAdvanceRatio</td><td className="py-2 pr-6">0.62</td><td className="py-2">Fraction of fontSize used as character advance width.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">charAdvanceRatio</td><td className="py-2 pr-6">0.62</td><td className="py-2">Fraction of fontSize used as a character&apos;s advance when it has no measured width (the scene and the React components measure widths for you).</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">charWidthMap</td><td className="py-2 pr-6">measured</td><td className="py-2">Advance width per character in px (see <code className="font-mono">measureCharWidths</code>).</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">lineHeightRatio</td><td className="py-2 pr-6">1.4</td><td className="py-2">Line height multiplier relative to fontSize.</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">repeat</td><td className="py-2 pr-6">true</td><td className="py-2">When false, text is placed exactly once without tiling.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">repeat</td><td className="py-2 pr-6">true</td><td className="py-2">When false, text is placed exactly once without tiling; text that doesn&apos;t fit is left out with a warning.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">characterCurve</td><td className="py-2 pr-6">0</td><td className="py-2">Bend characters to follow surface curvature. 0 = flat, 1 = full bend.</td></tr>
 							</tbody>
 						</table>
