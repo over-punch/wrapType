@@ -1,6 +1,6 @@
 {
 	"name": "wrap-type-site",
-	"version": "0.1.10",
+	"version": "0.1.11",
 	"private": true,
 	"scripts": {
 		"dev": "next dev",
@@ -12,7 +12,7 @@
 		"@overpunch/magnettype": "^1.2.1",
 		"@overpunch/wraptype": "file:..",
 		"@react-three/fiber": "^9.6.0",
-		"next": "^16.4.0",
+		"next": "^16.4.3",
 		"react": "19.2.4",
 		"react-dom": "19.2.4",
 		"three": "^0.170.0",
@@ -25,7 +25,7 @@
 		"@types/react-dom": "^19",
 		"@types/three": "^0.170.0",
 		"eslint": "^9",
-		"eslint-config-next": "^16.4.0",
+		"eslint-config-next": "^16.4.3",
 		"tailwindcss": "^4",
 		"typescript": "^5"
 	}
